@@ -1,5 +1,13 @@
 # PokeIt release notes
 
+## 0.1.17 · November 8, 2026 (ET)
+
+- Clear places proceed. A landmark written the way an agent writes it ("Alpharetta City Hall, Alpharetta, GA") no longer stops for confirmation; a state or ZIP suffix is read as the area. Namesakes in other cities, broad places and several chain branches still ask. (Service change; the plugin only follows its flag.)
+- Every map link comes with a ready Markdown link, so replies stop printing bare URLs.
+- "My area is dead": coverage lists the nearest mapped areas, closest first, so the agent can answer without measuring anything itself.
+- Desktop: a catch card whose data cannot be fetched keeps a place, a distance, a map button and a retry instead of a red box. The unreachable message says how to fix it. The Radar has a Best catches button that asks for cards.
+- Cards appear when you ask for "PokeIt cards" or start from the Radar. Start a fresh chat after updating.
+
 ## 0.1.16 · November 8, 2026 · 8:34 AM ET (EST, UTC-05:00)
 
 - Readable named map links in ordinary chat; no automatic Desktop card markup on unconfirmed frontends.

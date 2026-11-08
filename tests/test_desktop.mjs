@@ -124,6 +124,22 @@ test('standalone Radar follow-ups include the named place and precise map pin', 
   assert.match(ui.followUpQuestion('events', s), /Rattata useful today/);
   assert.equal(ui.followUpQuestion('raids', { center: null }), null);
 });
+test('the catches follow-up asks for cards by name, so a chat started from the Radar shows them', () => {
+  const s = { center: { lat: 34.0746, lon: -84.2922 }, label: 'Alpharetta City Hall', radius: 500, observations: [] };
+  const q = ui.followUpQuestion('catches', s);
+  assert.match(q, /What is worth catching near Alpharetta City Hall\? Show PokeIt cards\./);
+  assert.match(q, /https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
+  assert.equal(ui.followUpQuestion('catches', { center: null }), null);
+});
+test('an unreachable backend still leaves a card with a place, a distance and a map link', () => {
+  const args = ui.catchAttributes({ id: 'pid_offline', lat: '34.0752', lon: '-84.2900', origin_lat: '34.0746349', origin_lon: '-84.2922705' });
+  const withOrigin = ui.offlineCatch(args, 'Alpharetta City Hall');
+  assert.match(withOrigin.where, /^\d+ m (N|NE|E|SE|S|SW|W|NW) of Alpharetta City Hall$/);
+  assert.ok(ui.safeMapUrl(withOrigin.mapLink));
+  assert.equal(ui.offlineCatch({ id: 'pid_x', lat: 34, lon: -84 }, 'Alpharetta City Hall').where, 'Near Alpharetta City Hall');
+  assert.equal(ui.offlineCatch({ id: 'pid_x', lat: 34, lon: -84 }, '').where, 'At the pin the agent chose');
+  assert.equal(ui.offlineCatch(null, 'x'), null);
+});
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const webp = 'data:image/webp;base64,UklGRgQAAABXRUJQVlA4IA==';

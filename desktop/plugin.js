@@ -2,7 +2,7 @@ import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STA
 import { useEffect, useState, useId } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.14';
+const VERSION = '0.1.17';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -100,6 +100,13 @@ function distanceLabel(center, p, place) {
   if (!d) return 'Distance unknown';
   if (d.meters < 10) return place ? `At ${place}` : 'At the search point';
   return `${amount(d.meters)} ${d.direction} of ${place || 'the search point'}`;
+}
+// What a catch card can still say when the PokeIt backend is unreachable: only what the directive carried.
+export function offlineCatch(args, place) {
+  if (!args) return null;
+  const origin = number(args.origin_lat) && number(args.origin_lon) ? { lat: args.origin_lat, lon: args.origin_lon } : null;
+  const where = origin ? distanceLabel(origin, args, place) : place ? `Near ${place}` : 'At the pin the agent chose';
+  return { where, mapLink: mapUrl({ lat: args.lat, lon: args.lon }, 250) };
 }
 function mapUrl(center, radius) {
   const zoom = radius <= 250 ? 17 : radius <= 500 ? 16 : radius <= 1000 ? 15 : 14;
@@ -270,7 +277,7 @@ export function createController(ctx) {
       if (!quiet) healthy = true;
       return response.data;
     } catch (e) {
-      const message = e?.safeMessage ? text(e.message, 240) : 'The PokeIt backend could not be reached. Check that the plugin is enabled on the connected gateway.';
+      const message = e?.safeMessage ? text(e.message, 240) : 'PokeIt could not be reached. Enable the plugin for the profile you are chatting in (Capabilities, then Plugins), then try again.';
       // Icons are decoration; a failed one must not mark the backend unhealthy.
       if (!quiet) { healthy = false; lastError = message; }
       throw new Error(message);
@@ -355,7 +362,8 @@ export function followUpQuestion(kind, s) {
   if (!s.center) return null;
   const place = s.label && !['Choose a spot', 'Search point'].includes(s.label) ? `near ${s.label}` : 'near this selected map pin';
   const names = [...new Set(s.observations.map(p => text(p.name, 60)).filter(Boolean))].slice(0, 3);
-  const question = kind === 'raids' ? `What active raids are ${place}? Keep eggs separate.`
+  const question = kind === 'catches' ? `What is worth catching ${place}? Show PokeIt cards.`
+    : kind === 'raids' ? `What active raids are ${place}? Keep eggs separate.`
     : kind === 'gyms' ? `Which gyms ${place} have open slots?`
     : `Which active events make ${names.length ? names.join(', ') : 'these catches'} useful today ${place}?`;
   return `${question} Use this search area: ${mapUrl(s.center, s.radius)}`;
@@ -363,7 +371,7 @@ export function followUpQuestion(kind, s) {
 function FollowUps({ ctrl, c, sid }) {
   const s = useRadar(ctrl, sid);
   return hs('div', { style: { ...rowStyle, marginTop: 14 }, children: [
-    ['Raids nearby', 'raids'], ['Open gyms', 'gyms'], ['Events today', 'events']
+    ['Best catches', 'catches'], ['Raids nearby', 'raids'], ['Open gyms', 'gyms'], ['Events today', 'events']
   ].map(([label, kind]) => h(Button, { c, disabled: !s.center, onClick: () => {
     const question = followUpQuestion(kind, ctrl.state(sid));
     if (question) void draft(question, sid);
@@ -630,6 +638,18 @@ function Skeleton({ c, label }) {
     hs('div', { style: { flex: 1 }, children: [bar('45%', 14, 0), bar('70%', 10, 9), bar('55%', 10, 7)] })
   ] });
 }
+// The data call failed: keep the card useful with the position the agent chose, a map link and a retry.
+function OfflineCatch({ ctrl, c, args, place, error, retry }) {
+  const o = offlineCatch(args, place);
+  return hs('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 }, children: [
+    h('strong', { style: { fontSize: 13 }, children: 'A catch the agent picked' }),
+    h('span', { style: { fontSize: 13 }, children: o.where }),
+    h(ErrorNote, { c, message: error }),
+    hs('div', { style: rowStyle, children: [
+      h(Button, { c, primary: true, onClick: () => openMap(ctrl.ctx, o.mapLink), children: 'Open map' }),
+      h(Button, { c, onClick: retry, children: 'Try again' })] })
+  ] });
+}
 function CatchCard({ ctrl, attrs, sid, streaming }) {
   const c = useColors(), args = catchAttributes(attrs), place = placeName(attrs), compact = catchVariant(attrs) === 'compact', key = args ? JSON.stringify(args) : '';
   const now = useValue(ctrl.clock), [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
@@ -653,7 +673,7 @@ function CatchCard({ ctrl, attrs, sid, streaming }) {
     background: hl && !row ? `radial-gradient(circle at 105px 100px, ${hl.color}33 0, ${hl.color}00 250px), ${c.surface}` : c.surface }, children: [
     h(Styles, {}),
     !data && !error && h(Skeleton, { c, label: streaming ? 'Preparing catch card' : 'Checking this catch' }),
-    error && hs('div', { children: [h(ErrorNote, { c, message: error }), h(Button, { c, onClick: () => setRetry(v => v + 1), children: 'Try again' })] }),
+    error && h(OfflineCatch, { ctrl, c, args, place, error, retry: () => setRetry(v => v + 1) }),
     p && h(row ? CompactCatch : CatchSummary, { ctrl, c, p, center: data.origin, sid, place }),
     data?.truncated && h('small', { style: fine(c), children: 'The source returned a limited sample.' })
   ] });
