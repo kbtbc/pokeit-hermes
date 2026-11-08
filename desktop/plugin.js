@@ -116,7 +116,7 @@ function useActiveSession() {
   const runtime = useValue(host.state.focusedSessionId);
   return stored || runtime || 'new';
 }
-function createController(ctx) {
+export function createController(ctx) {
   const revision = atom(0), clock = atom(Date.now()), sessions = new Map();
   let alive = true, lastError = '', healthy = null;
   const key = sid => sid || activeSession();
@@ -160,6 +160,8 @@ function createController(ctx) {
     const s = state(sid), far = s.center && distanceBearing(s.center, observation)?.meters > s.radius;
     const center = origin || (!far && s.center) || { lat: observation.lat, lon: observation.lon };
     const moved = !s.center || distanceBearing(s.center, center)?.meters > 5;
+    // A late refresh from the previous point must not undo this explicit selection.
+    update(sid, { generation: s.generation + 1, busy: false, error: '' });
     if (moved) update(sid, { center, label: origin ? 'Search point' : text(observation.name, 60), queriedAt: new Date().toISOString(), coverage: null });
     const targetDistance = distanceBearing(center, observation)?.meters || 0;
     if (targetDistance > s.radius) update(sid, { radius: [250, 500, 1000, 2000].find(n => n >= targetDistance) || 2000 });
@@ -186,12 +188,30 @@ async function draft(textValue, sid = null) {
   const ok = await host.composer.insertText(sid, textValue, { mode: 'block' });
   if (!ok) host.notify({ kind: 'warning', message: 'Open this chat to add the question.' });
 }
-function FollowUps({ c, sid }) {
+function openRadar(ctrl, sid) {
+  host.openWorkspace('pokeit:radar', { title: 'PokeIt Radar', minWidth: 320, render: () => h(RadarPane, { ctrl, sessionId: sid }) });
+}
+export function showInRadar(ctrl, sid, observation, center) {
+  ctrl.adopt(sid, observation, center);
+  openRadar(ctrl, sid);
+}
+export function followUpQuestion(kind, s) {
+  if (!s.center) return null;
+  const place = s.label && !['Choose a spot', 'Search point'].includes(s.label) ? `near ${s.label}` : 'near this selected map pin';
+  const names = [...new Set(s.observations.map(p => text(p.name, 60)).filter(Boolean))].slice(0, 3);
+  const question = kind === 'raids' ? `What active raids are ${place}? Keep eggs separate.`
+    : kind === 'gyms' ? `Which gyms ${place} have open slots?`
+    : `Which active events make ${names.length ? names.join(', ') : 'these catches'} useful today ${place}?`;
+  return `${question} Use this search area: ${mapUrl(s.center, s.radius)}`;
+}
+function FollowUps({ ctrl, c, sid }) {
+  const s = useRadar(ctrl, sid);
   return hs('div', { style: { ...rowStyle, marginTop: 12 }, children: [
-    ['Raids nearby', 'What active raids are near this search point? Keep eggs separate.'],
-    ['Open gyms', 'Which nearby gyms have open slots?'],
-    ['Events today', 'Which active events make these catches useful today?']
-  ].map(([label, question]) => h(Button, { c, onClick: () => void draft(question, sid), children: label }, label)) });
+    ['Raids nearby', 'raids'], ['Open gyms', 'gyms'], ['Events today', 'events']
+  ].map(([label, kind]) => h(Button, { c, disabled: !s.center, onClick: () => {
+    const question = followUpQuestion(kind, ctrl.state(sid));
+    if (question) void draft(question, sid);
+  }, children: label }, label)) });
 }
 function CatchSummary({ ctrl, c, p, center, sid, compact = false }) {
   const now = useValue(ctrl.clock), timer = expiry(p, now);
@@ -214,7 +234,7 @@ function CatchSummary({ ctrl, c, p, center, sid, compact = false }) {
     rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 5 }, children: rank }),
     hs('div', { style: { ...rowStyle, marginTop: 10 }, children: [
       h(Button, { c, primary: true, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
-      !compact && h(Button, { c, onClick: () => ctrl.adopt(sid, p, center), children: 'Show in Radar' })
+      !compact && h(Button, { c, onClick: () => showInRadar(ctrl, sid, p, center), children: 'Show in Radar' })
     ] })
   ] });
 }
@@ -246,8 +266,8 @@ function RadarSvg({ ctrl, c, s, sid }) {
       !s.center && h('text', { x: 160, y: 190, fill: c.muted, textAnchor: 'middle', fontSize: 12, children: 'Your next hunt starts here' })
     ] });
 }
-function RadarPane({ ctrl }) {
-  const c = useColors(), sid = useActiveSession(), fieldId = useId();
+function RadarPane({ ctrl, sessionId }) {
+  const c = useColors(), active = useActiveSession(), sid = sessionId || active, fieldId = useId();
   const s = useRadar(ctrl, sid), now = useValue(ctrl.clock);
   const [query, setQuery] = useState(''), [places, setPlaces] = useState([]), [finding, setFinding] = useState(false), [placeError, setPlaceError] = useState('');
   const selected = s.observations.find(p => p.observation_id === s.selected);
@@ -258,11 +278,11 @@ function RadarPane({ ctrl }) {
     setFinding(true); setPlaceError(''); setPlaces([]);
     try {
       const result = await ctrl.api('/place?' + new URLSearchParams({ query: query.trim(), limit: 5 }));
-      if (fromSession !== activeSession() || fromConnection !== gatewayActivationEpoch()) return;
+      if ((!sessionId && fromSession !== activeSession()) || fromConnection !== gatewayActivationEpoch()) return;
       const rows = Array.isArray(result.results) ? result.results : Array.isArray(result.places) ? result.places : [];
       setPlaces(rows);
       if (!rows.length) setPlaceError('No match yet. Try an address, intersection or landmark and city.');
-    } catch (e) { if (fromSession === activeSession()) setPlaceError(e.message); } finally { setFinding(false); }
+    } catch (e) { if (sessionId || fromSession === activeSession()) setPlaceError(e.message); } finally { setFinding(false); }
   }
   function choose(p) {
     if (p.requires_specific_location || !number(p.lat) || !number(p.lon)) { setPlaceError('Choose a nearby entrance, address or landmark so this scan covers a useful spot.'); return; }
@@ -295,7 +315,7 @@ function RadarPane({ ctrl }) {
     h(ErrorNote, { c, message: s.error }),
     status === 'needs_scan' && hs('div', { style: { ...panel(c), marginTop: 10, padding: 10 }, children: [
       h('p', { style: { ...fine(c), margin: '0 0 6px' }, children: 'No recent scan here. These are existing observations.' }),
-      h(Button, { c, onClick: () => void draft(`Check ${s.label} and scan if needed.`, sid), children: 'Ask Hermes to scan' })
+      h(Button, { c, onClick: () => void draft(`Check ${s.label} and scan if needed. Use this selected map pin: ${mapUrl(s.center, s.radius)}`, sid), children: 'Ask Hermes to scan' })
     ] }),
     status === 'in_progress' && h('p', { style: fine(c), children: 'A scan is in progress here. Refresh after it finishes.' }),
     s.queriedAt && !s.coverage && h('p', { style: fine(c), children: 'Coverage freshness could not be checked. These are existing observations.' }),
@@ -310,7 +330,7 @@ function RadarPane({ ctrl }) {
     s.observations.length > 1 && h('select', { 'aria-label': 'Select a catch', value: s.selected || '', onChange: e => ctrl.update(sid, { selected: e.target.value }),
       style: { marginTop: 8, width: '100%', background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: 8 }, children: s.observations.map(p => h('option', { value: p.observation_id, children: `${text(p.name)} · ${metric(p)}` }, p.observation_id)) }),
     s.center && h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open full map ↗' }),
-    h(FollowUps, { c, sid }),
+    h(FollowUps, { ctrl, c, sid }),
     h('p', { style: { ...fine(c), marginTop: 12 }, children: 'The pin is the search point, not your live GPS position. No new scans start in this pane.' }),
     h(Button, { c, style: { background: 'transparent', fontSize: 11 }, onClick: () => void ctrl.debug(), children: 'Copy debug info' })
   ] });
@@ -368,7 +388,7 @@ function ScanCard({ ctrl, attrs, streaming }) {
       hs('div', { children: [
         h('div', { style: { fontSize: 27, fontWeight: 750, fontVariantNumeric: 'tabular-nums' }, children: p.total ? `${p.done}/${p.total}` : '—' }),
         h('div', { style: fine(c), children: 'points confirmed or covered' }),
-        elapsed !== null && h('div', { style: fine(c), children: `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2,'0')} elapsed` }),
+        elapsed !== null && h('div', { style: fine(c), children: `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2,'0')} ${p.terminal ? 'request age at check' : 'elapsed'}` }),
         p.unverified > 0 && h('div', { style: { ...fine(c), color: c.accent }, children: `${p.unverified} unverified` }),
         p.failed > 0 && h('div', { style: { ...fine(c), color: c.red }, children: `${p.failed} failed` })
       ] })
@@ -381,10 +401,11 @@ function ScanCard({ ctrl, attrs, streaming }) {
 }
 function StatusChip({ ctrl }) {
   const c = useColors(), sid = useActiveSession();
-  const s = useRadar(ctrl, sid);
+  const s = useRadar(ctrl, sid), now = useValue(ctrl.clock);
+  const liveCount = s.observations.filter(p => !expiry(p, now).expired).length;
   return h('button', { type: 'button', title: 'Open PokeIt Radar', style: { font: `600 11px ${font}`, cursor: 'pointer', color: 'var(--ui-text-secondary)', background: 'transparent', border: 0, padding: '2px 6px' },
-    onClick: () => host.openWorkspace('pokeit:radar', { title: 'PokeIt Radar', minWidth: 320, render: () => h(RadarPane, { ctrl }) }),
-    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), s.busy ? ' · reading' : s.observations.length ? ` · ${s.observations.length} nearby` : ' · Radar'] }) });
+    onClick: () => openRadar(ctrl, sid),
+    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] }) });
 }
 
 export default {

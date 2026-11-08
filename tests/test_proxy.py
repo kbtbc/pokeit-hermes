@@ -7,6 +7,7 @@ import io
 import json
 from pathlib import Path
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import urllib.error
@@ -28,6 +29,11 @@ AT = datetime.fromisoformat(SNAPSHOT["queried_at"]).timestamp()
 ROW = SNAPSHOT["observations"][0]
 
 
+def wallclock(timestamp):
+    # Freeze only the proxy's wall clock. httpx/AnyIO keep their real clocks.
+    return patch.object(api, "time", SimpleNamespace(time=lambda: timestamp, monotonic=time.monotonic))
+
+
 class Reply(io.BytesIO):
     def __init__(self, body, content_type="application/json"):
         super().__init__(body)
@@ -37,6 +43,10 @@ class Reply(io.BytesIO):
 class ProxyTests(unittest.TestCase):
     def setUp(self):
         api._cache.clear()
+        # A missed mock must fail immediately, never contact the hosted service.
+        guard = patch.object(api.urllib.request, "build_opener", side_effect=AssertionError("Unexpected network call in offline proxy tests"))
+        guard.start()
+        self.addCleanup(guard.stop)
 
     def request(self, path, **kwargs):
         return client.get("/api/plugins/pokeit" + path, **kwargs).json()
@@ -129,20 +139,20 @@ class ProxyTests(unittest.TestCase):
         self.assertLessEqual(sum(entry[2] for entry in api._cache.values()), 300)
 
     def test_nearby_filters_and_expiry(self):
-        with patch.object(api, "_fetch", return_value=deepcopy(SNAPSHOT)) as fetch, patch.object(api.time,"time",return_value=AT):
+        with patch.object(api, "_fetch", return_value=deepcopy(SNAPSHOT)) as fetch, wallclock(AT):
             result = self.request("/nearby?lat=34&lon=-84&selection=all&min_iv=90&limit=10&order=priority&timezone_name=America/New_York")
         self.assertTrue(result["ok"])
         self.assertEqual(result["data"]["observations"], SNAPSHOT["observations"])
         args = fetch.call_args.args[1]["arguments"]
         self.assertEqual((args["min_iv"],args["limit"],args["order"]),(90,10,"priority"))
-        with patch.object(api.time, "time", return_value=AT + 86400):
+        with wallclock(AT + 86400):
             result = self.request("/nearby?lat=34&lon=-84&selection=all&min_iv=90&limit=10&order=priority&timezone_name=America/New_York")
         self.assertTrue(result["meta"]["cached"])
         self.assertEqual(result["data"]["observations"], [])
 
     def test_card_found_origin_direction_and_absence_are_truthful(self):
         query = f"/card?id={ROW['observation_id']}&lat={ROW['lat']}&lon={ROW['lon']}"
-        with patch.object(api, "_fetch", return_value=deepcopy(SNAPSHOT)), patch.object(api.time,"time",return_value=AT):
+        with patch.object(api, "_fetch", return_value=deepcopy(SNAPSHOT)), wallclock(AT):
             result = self.request(query)
             self.assertEqual(result["data"]["status"], "observed")
             self.assertIsNone(result["data"]["observation"]["distance_m"])
@@ -157,9 +167,9 @@ class ProxyTests(unittest.TestCase):
 
     def test_cached_card_verified_expiry(self):
         query = f"/card?id={ROW['observation_id']}&lat={ROW['lat']}&lon={ROW['lon']}"
-        with patch.object(api, "_fetch", return_value=deepcopy(SNAPSHOT)), patch.object(api.time,"time",return_value=AT):
+        with patch.object(api, "_fetch", return_value=deepcopy(SNAPSHOT)), wallclock(AT):
             self.assertFalse(self.request(query)["data"]["gone"])
-        with patch.object(api.time,"time",return_value=AT+86400):
+        with wallclock(AT+86400):
             result = self.request(query)
         self.assertTrue(result["data"]["gone"])
         self.assertEqual(result["data"]["status"], "expired")

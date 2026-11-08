@@ -69,3 +69,41 @@ test('registration only mounts UI and timers; it never calls the service', () =>
   for (const dispose of disposers) dispose();
   assert.doesNotMatch(source, /request_scan|composer\.submit|window\.hermes|document\.(?:querySelector|getElementById)/);
 });
+
+test('Show in Radar selects the catch and opens the same workspace for its chat', () => {
+  const calls = [];
+  host.openWorkspace = (id, options) => calls.push({ id, options });
+  const ctrl = { adopt: (...args) => calls.push(args) };
+  const p = { observation_id: 'pid_demo', lat: 34, lon: -84 };
+  ui.showInRadar(ctrl, 'chat-2', p, { lat: 34.001, lon: -84 });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][0], 'chat-2');
+  assert.equal(calls[1].id, 'pokeit:radar');
+  const pane = calls[1].options.render();
+  assert.equal(pane.props.sessionId, 'chat-2');
+});
+
+test('a late previous-area read cannot replace the selected card location', async () => {
+  let finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const ctrl = ui.createController({ setInterval: () => () => {}, onEvent: () => {}, onDispose: () => {},
+    rest: path => path.startsWith('/nearby') ? pending : Promise.resolve({ ok: true, data: { scan_plan: { status: 'existing_coverage' } } }) });
+  const task = ctrl.read('test', { lat: 34, lon: -84 }, 'Old point', 500);
+  ctrl.adopt('test', { observation_id: 'pid_new', name: 'New catch', lat: 35, lon: -85 }, { lat: 35, lon: -85 });
+  finish({ ok: true, data: { observations: [{ observation_id: 'pid_old', lat: 34, lon: -84 }], queried_at: '2026-11-07T22:00:00Z' } });
+  await task;
+  assert.equal(ctrl.state('test').selected, 'pid_new');
+  assert.equal(ctrl.state('test').center.lat, 35);
+  assert.equal(ctrl.state('test').observations.length, 1);
+  assert.equal(ctrl.state('test').busy, false);
+});
+
+test('standalone Radar follow-ups include the named place and precise map pin', () => {
+  const s = { center: { lat: 34.0746, lon: -84.2922 }, label: 'Alpharetta City Hall', radius: 500, observations: [{ name: 'Rattata' }] };
+  const raids = ui.followUpQuestion('raids', s);
+  assert.match(raids, /Alpharetta City Hall/);
+  assert.match(raids, /https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
+  assert.match(raids, /Keep eggs separate/);
+  assert.match(ui.followUpQuestion('events', s), /Rattata useful today/);
+  assert.equal(ui.followUpQuestion('raids', { center: null }), null);
+});

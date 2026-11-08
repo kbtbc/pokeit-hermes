@@ -22,7 +22,7 @@ export const mode=atom('dark'); export const useTheme=()=>({resolvedMode:useValu
 export const gatewayActivationEpoch=()=>1;
 export const PANES_AREA='panes',STATUSBAR_AREAS={right:'statusBar.right'},TRANSCRIPT_DIRECTIVE_AREA='transcript.directives';
 export const host={state:{focusedStoredSessionId:atom('fixture'),focusedSessionId:atom('fixture'),profile:atom('default'),gateway:atom('open')},
-composer:{insertText:async(s,text)=>{window.drafts.push({session:s,text});return true}},notify:v=>window.notices.push(v),openWorkspace:()=>{}};
+composer:{insertText:async(s,text)=>{window.drafts.push({session:s,text});return true}},notify:v=>window.notices.push(v),openWorkspace:(id)=>{window.openedRadar=id}};
 `;
 await writeFile(resolve(output, 'sdk.js'), sdk);
 const main = `
@@ -74,10 +74,15 @@ try {
   await page.getByRole('button',{name:'Events today',exact:true}).click();
   assert.equal((await page.evaluate(()=>window.drafts)).length,1);
   assert.ok((await page.evaluate(()=>window.drafts))[0].text.includes('active events'));
+  assert.ok((await page.evaluate(()=>window.drafts))[0].text.includes('Alpharetta City Hall'));
+  assert.ok((await page.evaluate(()=>window.drafts))[0].text.includes('https://pokeit.cc/map?'));
+  await page.getByRole('button',{name:'Show in Radar',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.openedRadar),'pokeit:radar');
   await page.getByRole('button',{name:'Copy debug info',exact:true}).click();
   await page.waitForFunction(()=>window.clipboard);
   assert.ok(!(await page.evaluate(()=>window.clipboard)).includes('34.0746'));
   await page.getByText('Scan complete',{exact:true}).waitFor({timeout:10000});
+  await page.getByText(/request age at check/).waitFor();
   await page.screenshot({path:resolve(output,'desktop-dark.png'),fullPage:true});
   await page.locator('#theme').click();
   await page.screenshot({path:resolve(output,'desktop-light.png'),fullPage:true});

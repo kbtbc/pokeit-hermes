@@ -35,9 +35,9 @@ Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering 
 
 ## Hermes Desktop
 
-On Hermes 0.23.0 or newer, open **PokeIt Radar** from the status bar. Pick a spot to see catches by distance and bearing, or let catch cards in your chat bring them into view. Cards show live countdowns; scan cards show reported progress. Radar reads existing observations. New scans still use the agent's approval prompt.
+On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`. Then open **PokeIt Radar** from the status bar. Pick a spot to see catches by distance and bearing, or use **Show in Radar** on a chat card. Cards show live countdowns; scan cards show reported progress. New scans still use the agent's approval prompt.
 
-If Desktop connects to a remote gateway, install and enable PokeIt on that gateway's selected profile too. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
+The Desktop installer adds the interface locally and the backend to your selected gateway profile. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
 
 ## Tools
 
