@@ -43,7 +43,7 @@ const origin='origin_lat="34.074612345678901" origin_lon="-84.29221234567890" pl
 const cards=[directive('id="pid_fixture_a" lat="34.076000" lon="-84.290000" '+origin),
   directive('id="pid_fixture_c" lat="34.0714" lon="-84.2893" variant="compact" '+origin),directive('id="pid_fixture_d" lat="34.0725" lon="-84.2952" variant="compact" '+origin),
   directive('id="pid_fixture_b" lat="34.0733" lon="-84.2931" variant="compact" '+origin),
-  directive('id="pid_fixture_late" lat="34.0714" lon="-84.2893" '+origin),directive('id="pid_fixture_gone" lat="34.07" lon="-84.29" '+origin),directive('id="pid_fixture_expired" lat="34.07" lon="-84.29" '+origin)];
+  directive('id="pid_fixture_late" lat="34.0714" lon="-84.2893" '+origin),directive('id="pid_fixture_gone" lat="34.07" lon="-84.29" '+origin),directive('id="pid_fixture_expired" lat="34.07" lon="-84.29" '+origin),directive('id="pid_fixture_offline" lat="34.0752" lon="-84.2900" '+origin)];
 const catches=[{observation_id:'pid_fixture_a',pokemon_id:147,form:0,name:'Dratini',lat:34.076,lon:-84.290,iv_percent:100,iv_attack:15,iv_defense:15,iv_stamina:15,cp:391,level:20,expires_at:at(14),expiry_verified:true,map_url:'https://pokeit.cc/pokemon/pid_fixture_a'},
 {observation_id:'pid_fixture_b',pokemon_id:198,form:0,name:'Murkrow',lat:34.0733,lon:-84.2931,iv_percent:73.3,iv_attack:0,iv_defense:15,iv_stamina:15,cp:711,level:22,expires_at:at(1.4),expiry_verified:false,map_url:'https://pokeit.cc/pokemon/pid_fixture_b',pvp_iv_rankings:{ultra:[{rank:1,ranked_species_name:'Honchkrow',same_species_as_observation:false}]}},
 {observation_id:'pid_fixture_c',pokemon_id:498,form:0,name:'Tepig',lat:34.0714,lon:-84.2893,iv_percent:95.56,iv_attack:15,iv_defense:15,iv_stamina:13,cp:307,level:10,expires_at:at(9),expiry_verified:true,map_url:'https://pokeit.cc/pokemon/pid_fixture_c'},
@@ -60,6 +60,7 @@ if(u.pathname==='/place')data={places:[{...center,choice_label:'Alpharetta City 
 else if(u.pathname==='/nearby')data={location:center,observations:catches,queried_at:new Date().toISOString(),truncated:false};
 else if(u.pathname==='/coverage')data={scan_plan:{status:'existing_coverage'}};
 else if(u.pathname==='/icon/'+u.pathname.split('/')[2])data={url:ICONS[u.pathname.split('/')[2]]||null};
+else if(u.pathname==='/card'&&u.searchParams.get('id')==='pid_fixture_offline')throw Error('gateway down');
 else if(u.pathname==='/card'){const id=u.searchParams.get('id'),gone=id==='pid_fixture_gone',expired=id==='pid_fixture_expired';
   data={observation:gone||expired?null:[...catches,late].find(p=>p.observation_id===id),origin:u.searchParams.has('origin_lat')&&u.searchParams.has('origin_lon')?{lat:Number(u.searchParams.get('origin_lat')),lon:Number(u.searchParams.get('origin_lon'))}:null,status:gone?'not_seen':expired?'expired':'observed',truncated:false};}
 else if(u.pathname.startsWith('/scan/')){scanCalls++;data={status:scanCalls===1?'queued':'data_refreshed',total_points:49,counts:{confirmed:scanCalls===1?17:42,existing_area:7,pending:scanCalls===1?25:0,failed:0,unverified:0},created_at:now/1000-35,poll_after_seconds:5,map_url:'https://pokeit.cc/map?lat=34.0746&lon=-84.2922'};}
@@ -104,6 +105,8 @@ try {
   assert.equal(await page.getByText(/^Too far: 2 min, ~1:/).count(),1);
   assert.equal(await page.getByText('This catch has expired.',{exact:true}).count(),1);
   assert.equal(await page.getByText(/no longer in the latest read/).count(),1);
+  assert.equal(await page.getByText('A catch the agent picked',{exact:true}).count(),1);
+  assert.equal(await page.getByText(/could not be reached/).count(),1);
   if (iconDir) { await page.waitForFunction(()=>document.querySelectorAll('article img').length>=2); }
   await page.getByLabel('Pick a precise spot').fill('Alpharetta City Hall');
   await page.getByRole('button',{name:'Find',exact:true}).click();
@@ -112,6 +115,9 @@ try {
   assert.equal(await page.getByRole('button',{name:'Alpharetta City Hall, Georgia'}).count(),0);
   await page.getByRole('button',{name:/Tepig 95.6% IV/}).first().click();
   await page.getByRole('button',{name:'Raids nearby',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Best catches',exact:true}).click();
+  assert.ok((await page.evaluate(()=>window.drafts)).at(-1).text.includes('Show PokeIt cards.'));
+  await page.evaluate(()=>{window.drafts.length=0});
   await page.getByRole('button',{name:'Events today',exact:true}).click();
   assert.equal((await page.evaluate(()=>window.drafts)).length,1);
   assert.ok((await page.evaluate(()=>window.drafts))[0].text.includes('active events'));
