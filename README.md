@@ -11,6 +11,11 @@
   No account, no API key.
 </p>
 
+<p align="center">
+  <img alt="A PokeIt catch card in Hermes Desktop: Cubone with IV bars, a compass, a live countdown and a walking guide" src="assets/desktop-card.png" width="720"><br>
+  <sub>A catch card in Hermes Desktop, from a real scan at the Charging Bull in New York.</sub>
+</p>
+
 ## Try it
 
 ```sh

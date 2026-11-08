@@ -41,7 +41,7 @@ Ordinary chat uses the readable Markdown answer and map links above. Do not auto
 
 Use cards when the player asks for "PokeIt cards" (the Radar's Best catches button writes exactly that) or is using the installed PokeIt Radar view and card support is established. If uncertain, omit the directives and keep the normal answer; do not ask the player a setup question during a catch search. A card shows species, IVs, distance and time left, so with a card say which catch to go for and why instead of repeating those figures. It supplements, never replaces, the catch's name and map link.
 
-For that supported Desktop case, put each card in its own paragraph, with a blank line before and after: `::pokeit-catch{id="OBSERVATION_ID" lat="CATCH_LAT" lon="CATCH_LON" origin_lat="SEARCH_LAT" origin_lon="SEARCH_LON" place="SEARCH_PLACE"}`. Use exact returned values. At most three; subsequent cards use `variant="compact"`. After an approved scan, `::pokeit-scan{id="REQUEST_ID"}` uses the real ID. Never put multiple directives in one paragraph. Cards only read data; they never start scans.
+For that supported Desktop case, put each card in its own paragraph, with a blank line before and after: `::pokeit-catch{id="OBSERVATION_ID" lat="CATCH_LAT" lon="CATCH_LON" origin_lat="SEARCH_LAT" origin_lon="SEARCH_LON" place="SEARCH_PLACE"}`. Use exact returned values. At most three; subsequent cards use `variant="compact"`. Right after `request_scan` returns its request ID, put `::pokeit-scan{id="REQUEST_ID"}` (the real ID) in its own paragraph, then keep polling `get_scan_status`: it is the player's progress bar. Never put multiple directives in one paragraph. Cards only read data; they never start scans.
 
 ## Refusals
 
