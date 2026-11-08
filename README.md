@@ -5,16 +5,11 @@
   </picture>
 </p>
 
-<p align="center">
-  <b>Live Pokémon GO data for your Hermes agent.</b><br>
-  Hundos, raids, showcases and events near any spot, from a real scanning network.<br>
-  No account, no API key.
-</p>
+**Live Pokémon GO data for your Hermes agent.** Hundos, raids, showcases and events near any spot, from a real scanning network. No account, no API key.
 
-<p align="center">
-  <img alt="A PokeIt catch card in Hermes Desktop: Cubone with IV bars, a compass, a live countdown and a walking guide" src="assets/desktop-card.png" width="720"><br>
-  <sub>A catch card in Hermes Desktop, from a real scan at the Charging Bull in New York.</sub>
-</p>
+![A PokeIt catch card in Hermes Desktop: Cubone with IV bars, a compass, a live countdown and a walking guide](assets/desktop-card.png)
+
+*A catch card in Hermes Desktop, from a real scan at the Charging Bull in New York.*
 
 ## Try it
 
