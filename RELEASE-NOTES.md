@@ -1,5 +1,12 @@
 # PokeIt release notes
 
+## 0.1.16 · November 8, 2026 · 8:34 AM ET (EST, UTC-05:00)
+
+- Readable named map links in ordinary chat; no automatic Desktop card markup on unconfirmed frontends.
+- Cards remain available in the supported PokeIt Desktop view, separated into individual paragraphs and accompanied by usable links.
+- Preserve exact Pokémon names, show only rank #1 in general catch answers, and proceed with already-resolved nearby search areas.
+- Radar and card design are unchanged. Start a fresh chat after updating to load the revised guidance.
+
 ## 0.1.15 · November 8, 2026 · 7:10 AM ET (EST, UTC-05:00)
 
 - Worldwide place lookup through self-hosted Photon, with limited US fallback. Confirm a new place and city before scanning; follow-ups reuse the confirmed spot.

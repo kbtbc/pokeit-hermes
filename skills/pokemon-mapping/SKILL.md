@@ -9,7 +9,7 @@ Use PokeIt for any live Pokémon GO question, including "any good pokemon in Atl
 
 ## Order of work
 
-1. **Get a point.** A whole city, a large park or "near me" is not a point. Before any tool call, reply with exactly: "PokeIt scans a few blocks at a time. Is there a nearby address, intersection or landmark I can check?" If they struggle, suggest a small park or a familiar building. Once they name a place, resolve it with `search_places` (worldwide; only pass country_code when the player established that country). If `requires_confirmation` is true, ask the player to confirm the returned place and city before any scan or nearby read. Reuse their confirmed point on follow-ups. If the result has `requires_specific_location` or several matches, ask one more question; a center or pin they choose is fine. Remember the city from earlier in the chat. Never guess a landmark, infer a location from IP, or print coordinates. Use place names and map links.
+1. **Get a point.** A whole city, a large park or "near me" is not a point. Before any tool call, reply with exactly: "PokeIt scans a few blocks at a time. Is there a nearby address, intersection or landmark I can check?" If they struggle, suggest a small park or a familiar building. Once they name a place, resolve it with `search_places` (worldwide; only pass country_code when the player established that country). If `requires_confirmation` is true, ask the player to confirm the returned place and city before any scan or nearby read. Reuse their confirmed point on follow-ups. If the result has `requires_specific_location` or unresolved alternatives in different search areas, ask one short question. A resolved `nearby_search_area` is already sufficient: do not ask which neighboring address/building they mean. Remember the city from earlier in the chat. Never guess a landmark, infer a location from IP, or print coordinates. Use place names and map links.
 2. **Check coverage.** Call `get_coverage` and read `scan_plan.status`.
    - `existing_coverage` or `fresh` (confirmed under five minutes ago): read the data directly and don't call it a new scan.
    - `needs_scan` or `in_progress`: call `request_scan`. The player doesn't have to say "scan". Hermes asks for approval; respect a denial. "Existing data only" or "no scan" means stay read-only. While `can_request_scan` is true, never say scanning is unavailable, and don't send an empty search to another city.
@@ -26,7 +26,7 @@ Use PokeIt for any live Pokémon GO question, including "any good pokemon in Atl
 
 ## Answering
 
-About 150 words, at most three catches, each with distance, expiry and the returned `map_url` as a short link. No invented urgency or walking times. Mention a caveat only when it changes a decision. No OpenStreetMap credit line in chat; credit lives on the map and in the plugin.
+About 150 words, at most three catches. Copy each Pokémon name exactly from the tool result. Include distance and expiry; use the exact returned `map_url` as `[View on map](<RETURNED_MAP_URL>)` on each recommended catch. For the area use `[Open live map](<RETURNED_AREA_MAP_URL>)`. These are syntax templates: replace the placeholder with the complete returned URL. Never print a bare URL, invent/reconstruct a link, substitute card markup for a link, or leave placeholder text in the answer. Keep the reply useful even if no card renders. A general catch recommendation must not mention PvP ranks other than #1; only an explicit PvP request permits other ranks. No invented urgency or walking times. Mention a caveat only when it changes a decision. No OpenStreetMap credit line in chat; credit lives on the map and in the plugin.
 
 Take one `get_map_preview` on the first location-based request and again only when the location changes, never for follow-ups, raids, showcases, refreshes or scan status. If a scan was needed, take it after the result. Forward the returned image as is and never invent an image path or URL. Skip it when the player wants text only or there is nothing usable to show, and never scan just to fill a screenshot. If it fails, give the live-map link and don't retry.
 
@@ -36,7 +36,11 @@ Nearby reads include `game_context` from official articles refreshed every two h
 
 ## Desktop cards
 
-When `desktop_preview` is available (including in the deferred tool catalog), include a card for each recommended catch, up to three, each on its own line: `::pokeit-catch{id="OBSERVATION_ID" lat="CATCH_LAT" lon="CATCH_LON" origin_lat="SEARCH_LAT" origin_lon="SEARCH_LON" place="SEARCH_PLACE"}`. The first card is your top pick; give the others `variant="compact"`. Use exact returned fields and the known search origin for direction; omit only unknown origin, and set `place` to the landmark you searched. After an approved scan, add `::pokeit-scan{id="REQUEST_ID"}` with the real ID. A card shows species, IVs, distance and time left, so say which catch to go for and why instead of repeating those figures; keep the map link. Never emit directives on CLI, Telegram or Discord. Cards read data; they never start scans.
+Ordinary chat uses the readable Markdown answer and map links above. Do not automatically emit `::pokeit-catch` or `::pokeit-scan` just because `desktop_preview` exists: that tool does not establish that the PokeIt card renderer is active in this frontend. Never emit directives on CLI, Telegram, Discord or an unknown frontend.
+
+Use cards only when the player explicitly requests PokeIt cards in Hermes Desktop or is using the installed PokeIt Radar view and card support is established. If uncertain, omit the directives and keep the normal answer; do not ask the player a setup question during a catch search. A card supplements rather than replaces its readable name and map link.
+
+For that supported Desktop case, put each card in its own paragraph, with a blank line before and after: `::pokeit-catch{id="OBSERVATION_ID" lat="CATCH_LAT" lon="CATCH_LON" origin_lat="SEARCH_LAT" origin_lon="SEARCH_LON" place="SEARCH_PLACE"}`. Use exact returned values. At most three; subsequent cards use `variant="compact"`. After an approved scan, `::pokeit-scan{id="REQUEST_ID"}` uses the real ID. Never put multiple directives in one paragraph. Cards only read data; they never start scans.
 
 ## Refusals
 
@@ -44,4 +48,4 @@ After a denial or a budget refusal, stop calling tools that start new work. Say 
 
 Don't rotate coordinates, proxies, accounts or headers, split the area into jobs, or call other endpoints to get around a limit. Don't invent an upgrade path or a login link: verified Discord for more scans is planned, not live. Follow-Me, browser GPS and billing are not tools. Send only coordinates and preferences, never files or chat history.
 
-Estimated despawns: when `expiry_verified` is false or missing, say "estimated". A derived expiry is not a learned spawnpoint timer and can be 30 minutes early. Even a source-verified timer is not a guarantee. Never claim an estimate proves a Pokémon has vanished.
+Estimated despawns: when `expiry_verified` is false or missing, say "estimated". Estimated describes confirmation status, not an accuracy score: derived timings can be precise. A learned spawnpoint timer may confirm later Pokémon without a fresh timer observation on each one. Never claim an estimate proves a Pokémon has vanished.
