@@ -57,8 +57,9 @@ The Desktop installer adds the interface locally and the backend to your selecte
 | `find_pokemon` | Hundos, nundos and PvP rank 1 by default, or any species, IV or league filter |
 | `find_raids` `find_gyms` `find_showcases` `find_max_battles` `find_pokestops` | What is active near a point: raids and eggs, gym slots, showcases, Max Battles, lures and Rocket stops |
 | `get_game_context` `get_event_details` | Official event articles that matter for what is nearby |
+| `resolve_location` `prepare_search` | The shared decisions every PokeIt surface uses: is this one precise place, and is there data to read, a scan to offer or a limit to explain. Read-only |
 | `get_coverage` `request_scan` `get_scan_status` | Check coverage, start an approved scan, follow its progress |
-| `search_places` `describe_location` `list_areas` | Place name to coordinates and back (worldwide; clear matches proceed, ambiguous places need clarification), and the listed map areas |
+| `search_places` `describe_location` `list_areas` | Place name to coordinates and back (worldwide), and the listed map areas |
 | `get_map_preview` | A map screenshot with a live link |
 
 ## What leaves your machine
