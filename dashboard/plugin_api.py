@@ -2,7 +2,9 @@
 
 No API keys, background jobs, subprocesses or configurable upstream addresses.
 Synchronous handlers run in FastAPI's worker pool, never on the gateway loop.
+Besides MCP reads it fetches Pokémon icons from the PokeIt map's own assets.
 """
+import base64
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime
@@ -32,6 +34,13 @@ _cache = OrderedDict()
 _cache_lock = threading.Lock()
 _call_locks = [threading.Lock() for _ in range(16)]
 _slots = threading.BoundedSemaphore(4)
+ICON_BASE = "https://pokeit.cc/assets/bigfunOutline/"
+ICON_MAX_BYTES = 64 * 1024
+MAX_ICONS = 256
+_icons = OrderedDict()
+_icon_index = {"at": 0.0, "names": frozenset()}
+_icon_lock = threading.Lock()
+_icon_slots = threading.BoundedSemaphore(3)
 
 
 def plugin_version():
@@ -120,6 +129,63 @@ def _fetch(method, params):
         _slots.release()
 
 
+def _get_asset(url, limit, accept):
+    """One GET to a fixed pokeit.cc address: no proxies, no redirects, bounded size."""
+    req = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "PokeIt-Hermes-Desktop/" + VERSION})
+    if not _icon_slots.acquire(timeout=5):
+        raise ProxyError("busy", "PokeIt Radar is already loading several icons. Try again shortly.", True)
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        with opener.open(req, timeout=15) as response:
+            body = response.read(limit + 1)
+            if len(body) > limit:
+                raise ProxyError("response_too_large", "An icon was larger than expected.")
+            return body, response.headers.get("Content-Type", "").split(";")[0].strip()
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        raise ProxyError("http_" + str(exc.code), "PokeIt is temporarily unavailable. Please try again.", True) from None
+    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+        raise ProxyError("unreachable", "PokeIt did not respond. Check your connection and try again.", True) from None
+    finally:
+        _icon_slots.release()
+
+
+def icon_names():
+    with _icon_lock:
+        if _icon_index["names"] and time.monotonic() - _icon_index["at"] < 3600:
+            return _icon_index["names"]
+    body, _ = _get_asset(ICON_BASE + "index.json", MAX_BYTES, "application/json")
+    try:
+        names = frozenset(n for n in json.loads(body)["pokemon"] if isinstance(n, str) and n.endswith(".webp"))
+    except (ValueError, KeyError, TypeError):
+        raise ProxyError("invalid_response", "PokeIt returned an unreadable icon list.", True) from None
+    with _icon_lock:
+        _icon_index.update(at=time.monotonic(), names=names)
+    return names
+
+
+def icon(pokemon_id, form):
+    """A species icon as an inline image, or no icon. Names come only from the map's own index."""
+    names = icon_names()
+    name = next((n for n in ([f"{pokemon_id}_f{form}.webp"] if form else []) + [f"{pokemon_id}.webp"] if n in names), None)
+    if name is None:
+        return {"url": None}, {"cached": True}
+    with _icon_lock:
+        if name in _icons:
+            _icons.move_to_end(name)
+            return {"url": _icons[name]}, {"cached": True}
+    body, kind = _get_asset(ICON_BASE + "pokemon/" + name, ICON_MAX_BYTES, "image/webp")
+    if kind != "image/webp" or body[:4] != b"RIFF" or body[8:12] != b"WEBP":
+        raise ProxyError("invalid_response", "PokeIt returned an unreadable icon.", True)
+    url = "data:image/webp;base64," + base64.b64encode(body).decode("ascii")
+    with _icon_lock:
+        _icons[name] = url
+        _icons.move_to_end(name)
+        while len(_icons) > MAX_ICONS:
+            _icons.popitem(last=False)
+    return {"url": url}, {"cached": False}
+
+
 def call_read(tool, args):
     if tool == "health":
         method, params = "tools/list", {}
@@ -202,6 +268,9 @@ def dispatch(route, params):
         if not 2 <= len(query) <= 200 or any(ord(c) < 32 for c in query):
             raise ValueError("Use a place name between 2 and 200 characters.")
         return call_read("search_places", {"query": query, "limit": number(params, "limit", 1, 5, 3, True)})
+    if route == "icon":
+        allowed(params, {"pokemon_id", "form"})
+        return icon(number(params, "pokemon_id", 1, 4999, integer=True), number(params, "form", 0, 9999, 0, True))
     if route == "scan":
         allowed(params, {"request_id"})
         if not SCAN_ID.fullmatch(params.get("request_id", "")):
@@ -313,6 +382,11 @@ def place(request: Request):
 @router.get("/scan/{request_id}")
 def scan(request_id: str, request: Request):
     return respond("scan", request, {"request_id": request_id})
+
+
+@router.get("/icon/{pokemon_id}")
+def icon_route(pokemon_id: str, request: Request):
+    return respond("icon", request, {"pokemon_id": pokemon_id})
 
 
 @router.get("/health")

@@ -43,6 +43,8 @@ class Reply(io.BytesIO):
 class ProxyTests(unittest.TestCase):
     def setUp(self):
         api._cache.clear()
+        api._icons.clear()
+        api._icon_index.update(at=0.0, names=frozenset())
         # A missed mock must fail immediately, never contact the hosted service.
         guard = patch.object(api.urllib.request, "build_opener", side_effect=AssertionError("Unexpected network call in offline proxy tests"))
         guard.start()
@@ -174,6 +176,58 @@ class ProxyTests(unittest.TestCase):
         self.assertTrue(result["data"]["gone"])
         self.assertEqual(result["data"]["status"], "expired")
         self.assertIsNone(result["data"]["observation"])
+
+    def icon_opener(self, names, requests, webp=b"RIFF\x04\x00\x00\x00WEBPVP8 data", kind="image/webp"):
+        class Opener:
+            def open(opener, request, timeout):
+                requests.append(request)
+                if request.full_url.endswith("/index.json"):
+                    return Reply(json.dumps({"pokemon": names}).encode(), "application/json")
+                return Reply(webp, kind)
+        return Opener()
+
+    def test_icon_comes_from_the_map_index_as_an_inline_image_and_is_cached(self):
+        requests = []
+        with patch.object(api.urllib.request, "build_opener", return_value=self.icon_opener(["498.webp", "25.webp", "25_f1.webp"], requests)):
+            first = self.request("/icon/498")
+            again = self.request("/icon/498")
+            form = self.request("/icon/25?form=1")
+            fallback = self.request("/icon/25?form=7")
+        self.assertTrue(first["ok"])
+        self.assertTrue(first["data"]["url"].startswith("data:image/webp;base64,"))
+        self.assertTrue(again["meta"]["cached"])
+        self.assertTrue(form["ok"])
+        urls = [r.full_url for r in requests]
+        self.assertEqual(urls, ["https://pokeit.cc/assets/bigfunOutline/index.json",
+                                "https://pokeit.cc/assets/bigfunOutline/pokemon/498.webp",
+                                "https://pokeit.cc/assets/bigfunOutline/pokemon/25_f1.webp",
+                                "https://pokeit.cc/assets/bigfunOutline/pokemon/25.webp"])
+        self.assertTrue(fallback["ok"])
+        self.assertTrue(all(r.get_header("User-agent").startswith("PokeIt-Hermes-Desktop/") for r in requests))
+
+    def test_icon_for_a_species_without_art_is_empty_not_an_error(self):
+        requests = []
+        with patch.object(api.urllib.request, "build_opener", return_value=self.icon_opener(["1.webp"], requests)):
+            result = self.request("/icon/4000")
+        self.assertEqual(result["data"], {"url": None})
+        self.assertEqual(len(requests), 1)
+
+    def test_icon_ids_are_integers_in_range_and_never_build_other_paths(self):
+        with patch.object(api, "_get_asset") as fetch:
+            for path in ["/icon/0", "/icon/5000", "/icon/abc", "/icon/1.5", "/icon/..%2Fsecret", "/icon/25?form=-1",
+                         "/icon/25?form=10000", "/icon/25?pokemon_id=1", "/icon/25?path=../x", "/icon/25?form=1&form=2"]:
+                with self.subTest(path=path):
+                    self.assertFalse(self.request(path).get("ok"))
+            fetch.assert_not_called()
+
+    def test_icon_must_be_a_small_real_webp(self):
+        for webp, kind in [(b"<svg onload=alert(1)>", "image/webp"), (b"RIFF\x04\x00\x00\x00WEBPxx", "text/html"),
+                           (b"RIFF\x04\x00\x00\x00WEBP" + b"x" * api.ICON_MAX_BYTES, "image/webp")]:
+            api._icons.clear()
+            with self.subTest(kind=kind), patch.object(api.urllib.request, "build_opener", return_value=self.icon_opener(["9.webp"], [], webp, kind)):
+                result = self.request("/icon/9")
+            self.assertFalse(result["ok"])
+            self.assertNotIn("svg", json.dumps(result))
 
     def test_transport_failure_returns_readable_json_and_is_not_cached(self):
         with patch.object(api, "_fetch", side_effect=api.ProxyError("unreachable","Try again.",True)) as fetch:

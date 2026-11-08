@@ -126,6 +126,74 @@ test('standalone Radar follow-ups include the named place and precise map pin', 
 });
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
+const webp = 'data:image/webp;base64,UklGRgQAAABXRUJQVlA4IA==';
+function iconController(rest, storage = new Map()) {
+  return ui.createController({ setInterval: () => () => {}, onEvent: () => {}, onDispose: () => {}, rest,
+    storage: { get: (k, fallback) => storage.get(k) ?? fallback, set: (k, v) => storage.set(k, v) } });
+}
+
+test('place names are plain display text and stay out of service requests', () => {
+  assert.equal(ui.placeName({ place: '  Alpharetta City Hall  ' }), 'Alpharetta City Hall');
+  assert.equal(ui.placeName({ place: 'City\u0000Hall\n<b>x</b>' }), 'City Hall <b>x</b>');
+  assert.equal(ui.placeName({ place: 'x'.repeat(200) }).length, 80);
+  assert.equal(ui.placeName({}), ''); assert.equal(ui.placeName({ place: 5 }), '');
+  assert.equal(ui.catchAttributes({ id: 'pid_1', lat: '1', lon: '1', place: 'Somewhere' }).place, undefined);
+});
+
+test('icon keys name a species and form, and nothing else', () => {
+  assert.equal(ui.iconKey({ pokemon_id: 498, form: 0 }), '498');
+  assert.equal(ui.iconKey({ pokemon_id: 25, form: 1 }), '25_1');
+  for (const p of [{}, { pokemon_id: 0 }, { pokemon_id: 5000 }, { pokemon_id: '25' }, { pokemon_id: 1.5 }, null]) assert.equal(ui.iconKey(p), null);
+  assert.equal(ui.iconKey({ pokemon_id: 25, form: '../x' }), '25');
+});
+
+test('icons load once per species, a few at a time, and only accept inline webp images', async () => {
+  const paths = []; let release;
+  const gate = new Promise(r => { release = r; });
+  const ctrl = iconController(async path => {
+    paths.push(path); await gate;
+    return { ok: true, data: { url: path.startsWith('/icon/666') ? 'data:image/svg+xml;base64,PHN2Zz4=' : webp } };
+  });
+  const species = [498, 19, 25, 150, 666].map(id => ({ pokemon_id: id, form: 0 }));
+  assert.deepEqual(species.map(p => ctrl.icon(p)), [undefined, undefined, undefined, undefined, undefined]);
+  ctrl.icon(species[0]);
+  assert.equal(paths.length, 3);
+  release(); await flush(); await flush();
+  assert.equal(paths.length, 5); assert.equal(new Set(paths).size, 5);
+  assert.equal(ctrl.icon(species[0]), webp);
+  assert.equal(ctrl.icon(species[4]), null);
+  assert.equal(ctrl.icon({ pokemon_id: 25, form: 1 }), undefined);
+  assert.equal(paths.at(-1), '/icon/25?form=1');
+  assert.equal(ctrl.icon({ name: 'No id' }), null);
+});
+
+test('a failed icon never marks the backend unhealthy and falls back to a letter', async () => {
+  const ctrl = iconController(async path => path.startsWith('/icon') ? { ok: false, error: { message: 'down' } } : { ok: true, data: {} });
+  await ctrl.api('/health'); assert.equal(ctrl.healthy(), true);
+  ctrl.icon({ pokemon_id: 7, form: 0 }); await flush(); await flush();
+  assert.equal(ctrl.icon({ pokemon_id: 7, form: 0 }), null);
+  assert.equal(ctrl.healthy(), true);
+});
+
+test('the last spot is remembered locally after a read, validated on the way back, and never read on its own', async () => {
+  const storage = new Map(); let reads = 0;
+  const ctrl = iconController(async path => { reads++; return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-07T22:00:00Z' } : {} }; }, storage);
+  assert.equal(ctrl.lastSpot(), null); assert.equal(reads, 0);
+  await ctrl.read('test', { lat: 34.07, lon: -84.29 }, 'Alpharetta City Hall', 250);
+  assert.equal(JSON.stringify(ctrl.lastSpot()), '{"center":{"lat":34.07,"lon":-84.29},"label":"Alpharetta City Hall","radius":250}');
+  for (const bad of [{ lat: 'x', lon: 1, label: 'a', radius: 500 }, { lat: 99, lon: 1, label: 'a', radius: 500 }, { lat: 1, lon: 1, label: 'a', radius: 7 }, { lat: 1, lon: 1, label: 5, radius: 500 }]) {
+    storage.set([...storage.keys()].find(k => k.startsWith('last-spot')), bad); assert.equal(ctrl.lastSpot(), null);
+  }
+});
+
+test('opening a card names the search point after the place the agent gave', () => {
+  const ctrl = iconController(async () => ({ ok: true, data: {} }));
+  ctrl.adopt('test', { observation_id: 'pid_1', name: 'Tepig', lat: 34.07, lon: -84.29 }, { lat: 34.07, lon: -84.3 }, 'Alpharetta City Hall');
+  assert.equal(ctrl.state('test').label, 'Alpharetta City Hall');
+  ctrl.adopt('other', { observation_id: 'pid_2', name: 'Rattata', lat: 34.07, lon: -84.29 }, { lat: 34.07, lon: -84.3 });
+  assert.equal(ctrl.state('other').label, 'Search point');
+});
+
 function watchHarness(api) {
   const timers = [], notices = [], disposers = [], events = {}, storage = new Map();
   let time = Date.parse('2026-11-07T22:00:00Z');

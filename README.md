@@ -35,7 +35,7 @@ Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering 
 
 ## Hermes Desktop
 
-On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`. Then open **PokeIt Radar** from the status bar. Pick a spot to see catches by distance and bearing, or use **Show in Radar** on a chat card. Cards show live countdowns; scan cards show reported progress. New scans still use the agent's approval prompt.
+On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`. Then open **PokeIt Radar** from the status bar. Pick a spot to see its catches on a radar and in a list, or use **Show in Radar** on a chat card. Catch cards show the species art, IVs, distance and direction from the place you searched, and a live countdown; scan cards fill in as points are confirmed. New scans still use the agent's approval prompt.
 
 The Desktop installer adds the interface locally and the backend to your selected gateway profile. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
 
@@ -54,12 +54,12 @@ The Desktop installer adds the interface locally and the backend to your selecte
 
 ## What leaves your machine
 
-- Each tool call sends coordinates, place text and filters to `https://mcp.pokeit.cc`, which PokeIt runs. No files, credentials or conversation text are sent. Desktop uses the same host through a read-only Python proxy in your Hermes gateway, with a short in-memory cache. Opening a map link opens `https://pokeit.cc` in your browser.
+- Each tool call sends coordinates, place text and filters to `https://mcp.pokeit.cc`, which PokeIt runs. No files, credentials or conversation text are sent. Desktop uses the same host through a read-only Python proxy in your Hermes gateway, with a short in-memory cache, and the proxy also loads species icons from `https://pokeit.cc/assets`; no location goes with an icon request. Opening a map link opens `https://pokeit.cc` in your browser.
 - The service keeps tool names, filters, timings and result counts for about 14 days. A scan request keeps its coordinates and request ID for 24 hours, plus a keyed hash of your network address (not the address) to apply the trial limit. Ordinary web logs hold IP, path, time and status.
 - This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
-- Hunt Watch saves your filter and minimum IV locally per gateway/profile. Its watched location and seen catches stay in memory; it does not resume automatically after reopening the app.
+- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. The saved spot is only read when you choose **Resume**. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.
 - The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
 
 ## If the tools disappear

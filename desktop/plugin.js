@@ -2,15 +2,20 @@ import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STA
 import { useEffect, useState, useId } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.12';
+const VERSION = '0.1.13';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
+const ICON = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
 const TERMINAL = new Set(['data_refreshed', 'existing_coverage', 'partial_unverified', 'failed']);
+const RADII = [100, 250, 500, 1000, 2000];
+const EXAMPLES = [['Alpharetta City Hall', 'Alpharetta City Hall, Georgia'], ['Bethesda Terrace, NYC', 'Bethesda Terrace, Central Park, New York'],
+  ['Pike Place Market', 'Pike Place Market, Seattle']];
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0 });
 const text = (s, n = 180) => typeof s === 'string' ? s.slice(0, n) : '';
 const number = n => typeof n === 'number' && Number.isFinite(n);
+const named = label => label && !['Choose a spot', 'Search point'].includes(label) ? label : '';
 
 export function coordinate(v, max) {
   if (typeof v !== 'string' || !/^-?(?:\d{1,3}(?:\.\d{1,17})?|\.\d{1,17})$/.test(v)) return null;
@@ -23,6 +28,14 @@ export function catchAttributes(attrs) {
   const a = coordinate(attrs.origin_lat, 85), b = coordinate(attrs.origin_lon, 180);
   if (a !== null && b !== null) Object.assign(result, { origin_lat: a, origin_lon: b });
   return result;
+}
+// The place name is display text only; it never reaches the service.
+export function placeName(attrs) {
+  return typeof attrs?.place === 'string' ? attrs.place.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80) : '';
+}
+export function iconKey(p) {
+  if (!Number.isInteger(p?.pokemon_id) || p.pokemon_id < 1 || p.pokemon_id > 4999) return null;
+  return p.pokemon_id + (Number.isInteger(p.form) && p.form > 0 && p.form < 10000 ? '_' + p.form : '');
 }
 export function safeMapUrl(value) {
   try {
@@ -69,10 +82,12 @@ function rankLabel(p) {
   return '';
 }
 function metric(p) { return number(p?.iv_percent) ? `${Number(p.iv_percent.toFixed(1))}% IV` : 'IV unknown'; }
-function distanceLabel(center, p) {
+function amount(meters) { return meters < 1000 ? Math.round(meters) + ' m' : (meters / 1000).toFixed(1) + ' km'; }
+function distanceLabel(center, p, place) {
   const d = distanceBearing(center, p);
-  if (!d) return 'Distance from you unknown';
-  return d.meters < 10 ? 'At the search point' : `${d.meters < 1000 ? Math.round(d.meters) + ' m' : (d.meters / 1000).toFixed(1) + ' km'} ${d.direction} of search point`;
+  if (!d) return 'Distance unknown';
+  if (d.meters < 10) return place ? `At ${place}` : 'At the search point';
+  return `${amount(d.meters)} ${d.direction} of ${place || 'the search point'}`;
 }
 function mapUrl(center, radius) {
   const zoom = radius <= 250 ? 17 : radius <= 500 ? 16 : radius <= 1000 ? 15 : 14;
@@ -90,6 +105,9 @@ const rowStyle = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap:
 const fine = c => ({ color: c.muted, fontSize: 12, lineHeight: 1.5 });
 const panel = c => ({ fontFamily: font, color: c.fg, background: c.surface, border: `1px solid ${c.line}`,
   borderRadius: 12, padding: 14, overflow: 'hidden', minWidth: 0, lineHeight: 1.45 });
+const CSS = '@keyframes pokeit-pulse{0%,100%{opacity:1}50%{opacity:.35}}.pokeit-pulse{animation:pokeit-pulse 1.4s ease-in-out infinite}'
+  + '@media(prefers-reduced-motion:reduce){.pokeit-pulse{animation:none}}';
+const Styles = () => h('style', { children: CSS });
 function Button({ c, children, primary, style, ...props }) {
   return h('button', { type: 'button', ...props, style: { font: `600 12px ${font}`, borderRadius: 8,
     padding: '8px 11px', border: `1px solid ${primary ? c.accent : c.line}`, background: primary ? c.accent : c.raised,
@@ -98,11 +116,25 @@ function Button({ c, children, primary, style, ...props }) {
 function ErrorNote({ c, message }) {
   return h('p', { role: 'alert', style: { margin: '8px 0', color: c.red, fontSize: 12 } , children: message });
 }
-function Initial({ c, p, size = 38 }) {
-  const color = p?.iv_percent === 100 ? c.accent : p?.iv_percent === 0 ? c.blue : hasRankOne(p) ? c.green : c.muted;
-  return h('span', { 'aria-hidden': true, style: { display: 'grid', placeItems: 'center', width: size, height: size,
-    flexShrink: 0, background: c.raised, color: c.fg, border: `2px solid ${color}`, borderRadius: '50%', fontWeight: 750 },
-    children: text(p?.name, 1) || '?' });
+// What makes a catch worth the walk: hundo, nundo or a PvP rank 1. Null for an ordinary catch.
+function highlight(p, c) {
+  if (p?.iv_percent === 100) return { label: 'Hundo', color: c.accent };
+  if (p?.iv_percent === 0) return { label: 'Nundo', color: c.blue };
+  return hasRankOne(p) ? { label: 'PvP #1', color: c.green } : null;
+}
+// Species art from the PokeIt map's icon set, loaded through the gateway. A letter stands in when there is none.
+function Mon({ ctrl, c, p, size = 56, dim = false }) {
+  useValue(ctrl.iconRev);
+  const url = ctrl.icon(p), ring = highlight(p, c)?.color || c.line, art = size - 8;
+  return h('span', { 'aria-hidden': true, style: { display: 'grid', placeItems: 'center', width: size, height: size, flexShrink: 0,
+    boxSizing: 'border-box', background: c.raised, border: `2px solid ${ring}`, borderRadius: Math.round(size * .3), overflow: 'hidden',
+    fontWeight: 750, color: c.fg, filter: dim ? 'grayscale(1)' : undefined, opacity: dim ? .6 : 1 },
+    children: url ? h('img', { alt: '', src: url, width: art, height: art, draggable: false, style: { display: 'block' } })
+      : url === null ? text(p?.name, 1) || '?' : null });
+}
+function Arrow({ c, degrees }) {
+  return h('svg', { width: 12, height: 12, viewBox: '0 0 12 12', 'aria-hidden': true, style: { flexShrink: 0, transform: `rotate(${degrees}deg)` },
+    children: h('path', { d: 'M6 .5 10.5 11 6 8.4 1.5 11Z', fill: c.accent }) });
 }
 function openMap(ctx, value) {
   const url = safeMapUrl(value);
@@ -173,14 +205,15 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
       while (run.seen.size > 1024) run.seen.delete(run.seen.values().next().value);
       const names = fresh.slice(0, 2).map(p => `${text(p.name, 35)} (${metric(p)})`).join(', ');
       const body = `Found ${fresh.length} ${fresh.length === 1 ? 'match' : 'matches'} near ${run.label}: ${names}${fresh.length > 2 ? ` +${fresh.length - 2} more` : ''}.`;
+      const title = fresh.length === 1 ? `PokeIt: ${text(fresh[0].name, 35) || 'a catch'} nearby` : `PokeIt: ${fresh.length} catches nearby`;
       patch({ notice: body });
       clearBubble?.(); clearBubble = ctx.pet?.say(body, { id: 'hunt-watch', tone: 'info', ttlMs: 10000 });
       host.notify({ kind: 'info', message: body });
       // Hosts may deliver through an asynchronous bridge. A notification failure is not a failed data read.
       void Promise.resolve().then(() => {
         if (!valid(run)) return;
-        return ctx.os?.notify?.({ title: 'PokeIt Hunt Watch', body, onActivate: () => {
-          if (alive && run.scope === watchScope() && run.epoch === gatewayActivationEpoch()) onFound(run.sid, fresh[0], run.center);
+        return ctx.os?.notify?.({ title, body, onActivate: () => {
+          if (alive && run.scope === watchScope() && run.epoch === gatewayActivationEpoch()) onFound(run.sid, fresh[0], run.center, run.label);
         } });
       }).catch(() => { if (valid(run)) patch({ notificationNote: 'OS alerts are unavailable. Your matches are shown here.' }); });
     } catch (e) {
@@ -203,8 +236,9 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
   return { view, start, stop, configure, poll };
 }
 export function createController(ctx) {
-  const revision = atom(0), clock = atom(Date.now()), sessions = new Map();
-  let alive = true, lastError = '', healthy = null;
+  const revision = atom(0), clock = atom(Date.now()), iconRev = atom(0), sessions = new Map();
+  const icons = new Map(), iconQueue = [];
+  let alive = true, lastError = '', healthy = null, iconsBusy = 0;
   const key = sid => sid || activeSession();
   const state = sid => {
     const id = key(sid);
@@ -215,17 +249,38 @@ export function createController(ctx) {
     return sessions.get(id);
   };
   const update = (sid, patch) => { Object.assign(state(sid), patch); revision.set(revision.get() + 1); };
-  async function api(path) {
+  async function api(path, quiet = false) {
     const epoch = gatewayActivationEpoch();
     try {
       const response = await ctx.rest(path);
       if (!alive || epoch !== gatewayActivationEpoch()) throw Object.assign(new Error('Connection changed. Refresh to use the current connection.'), { safeMessage: true });
       if (!response?.ok) throw Object.assign(new Error(response?.error?.message || 'PokeIt is temporarily unavailable.'), { safeMessage: true });
-      healthy = true; return response.data;
+      if (!quiet) healthy = true;
+      return response.data;
     } catch (e) {
-      healthy = false; lastError = e?.safeMessage ? text(e.message, 240) : 'The PokeIt backend could not be reached. Check that the plugin is enabled on the connected gateway.';
-      throw new Error(lastError);
+      const message = e?.safeMessage ? text(e.message, 240) : 'The PokeIt backend could not be reached. Check that the plugin is enabled on the connected gateway.';
+      // Icons are decoration; a failed one must not mark the backend unhealthy.
+      if (!quiet) { healthy = false; lastError = message; }
+      throw new Error(message);
     }
+  }
+  // Icons arrive one species at a time, a few at once. undefined = loading, null = none, string = image.
+  function pumpIcons() {
+    while (alive && iconsBusy < 3 && iconQueue.length) {
+      const [k, path] = iconQueue.shift(); iconsBusy++;
+      api(path, true).then(d => icons.set(k, typeof d?.url === 'string' && d.url.length < 120000 && ICON.test(d.url) ? d.url : null), () => icons.set(k, null))
+        .finally(() => { iconsBusy--; iconRev.set(iconRev.get() + 1); pumpIcons(); });
+    }
+  }
+  function icon(p) {
+    const k = iconKey(p); if (!k) return null;
+    if (!icons.has(k)) { icons.set(k, undefined); iconQueue.push([k, `/icon/${p.pokemon_id}${k.includes('_') ? '?form=' + p.form : ''}`]); pumpIcons(); }
+    return icons.get(k);
+  }
+  function lastSpot() {
+    const v = ctx.storage?.get('last-spot:' + watchScope(), null);
+    return v && number(v.lat) && number(v.lon) && Math.abs(v.lat) <= 85 && Math.abs(v.lon) <= 180 && typeof v.label === 'string' && RADII.includes(v.radius)
+      ? { center: { lat: v.lat, lon: v.lon }, label: text(v.label, 100), radius: v.radius } : null;
   }
   async function read(sid, center, label, radius) {
     const s = state(sid), generation = s.generation + 1;
@@ -240,25 +295,26 @@ export function createController(ctx) {
       update(sid, { observations, coverage, queriedAt: result.queried_at, truncated: !!result.truncated,
         candidates: result.observed_candidates_in_radius, quietPick: !result.observations?.length && !!result.highest_observed_iv,
         busy: false, selected: observations[0]?.observation_id || null });
+      ctx.storage?.set('last-spot:' + watchScope(), { lat: center.lat, lon: center.lon, label: text(label, 100), radius });
     } catch (e) { if (alive && state(sid).generation === generation) update(sid, { busy: false, error: e.message }); }
   }
-  function adopt(sid, observation, origin) {
+  function adopt(sid, observation, origin, place) {
     const s = state(sid), far = s.center && distanceBearing(s.center, observation)?.meters > s.radius;
     const center = origin || (!far && s.center) || { lat: observation.lat, lon: observation.lon };
     const moved = !s.center || distanceBearing(s.center, center)?.meters > 5;
     // A late refresh from the previous point must not undo this explicit selection.
     update(sid, { generation: s.generation + 1, busy: false, error: '' });
-    if (moved) update(sid, { center, label: origin ? 'Search point' : text(observation.name, 60), queriedAt: new Date().toISOString(), coverage: null });
+    if (moved) update(sid, { center, label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
     const targetDistance = distanceBearing(center, observation)?.meters || 0;
     if (targetDistance > s.radius) update(sid, { radius: [250, 500, 1000, 2000].find(n => n >= targetDistance) || 2000 });
     const list = moved ? [] : s.observations.filter(p => p.observation_id !== observation.observation_id);
     update(sid, { observations: [observation, ...list].slice(0, 50), selected: observation.observation_id });
   }
-  function reset() { sessions.clear(); revision.set(revision.get() + 1); healthy = null; }
+  function reset() { sessions.clear(); icons.clear(); iconQueue.length = 0; revision.set(revision.get() + 1); healthy = null; }
   ctx.setInterval(() => clock.set(Date.now()), 1000);
   const unsub = host.state.profile.subscribe(reset);
   ctx.onEvent('gateway.ready', reset);
-  ctx.onDispose(() => { alive = false; unsub(); sessions.clear(); });
+  ctx.onDispose(() => { alive = false; unsub(); sessions.clear(); icons.clear(); });
   async function debug() {
     let health;
     try { health = await api('/health'); } catch { health = { reachable: false }; }
@@ -267,8 +323,8 @@ export function createController(ctx) {
     const ok = await ctx.os.writeClipboard(JSON.stringify(report, null, 2));
     host.notify({ kind: ok ? 'info' : 'warning', message: ok ? 'PokeIt debug info copied. No location or chat text included.' : 'Could not copy debug info.' });
   }
-  const controller = { ctx, revision, clock, state, update, api, read, adopt, debug, healthy: () => healthy };
-  controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center) => showInRadar(controller, sid, observation, center) });
+  const controller = { ctx, revision, clock, iconRev, state, update, api, read, adopt, icon, lastSpot, debug, healthy: () => healthy };
+  controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center, label) => showInRadar(controller, sid, observation, center, label) });
   return controller;
 }
 function useRadar(ctrl, sid) { useValue(ctrl.revision); return ctrl.state(sid); }
@@ -279,8 +335,8 @@ async function draft(textValue, sid = null) {
 function openRadar(ctrl, sid) {
   host.openWorkspace('pokeit:radar', { title: 'PokeIt Radar', minWidth: 320, render: () => h(RadarPane, { ctrl, sessionId: sid }) });
 }
-export function showInRadar(ctrl, sid, observation, center) {
-  ctrl.adopt(sid, observation, center);
+export function showInRadar(ctrl, sid, observation, center, place) {
+  ctrl.adopt(sid, observation, center, place);
   openRadar(ctrl, sid);
 }
 export function followUpQuestion(kind, s) {
@@ -294,7 +350,7 @@ export function followUpQuestion(kind, s) {
 }
 function FollowUps({ ctrl, c, sid }) {
   const s = useRadar(ctrl, sid);
-  return hs('div', { style: { ...rowStyle, marginTop: 12 }, children: [
+  return hs('div', { style: { ...rowStyle, marginTop: 14 }, children: [
     ['Raids nearby', 'raids'], ['Open gyms', 'gyms'], ['Events today', 'events']
   ].map(([label, kind]) => h(Button, { c, disabled: !s.center, onClick: () => {
     const question = followUpQuestion(kind, ctrl.state(sid));
@@ -302,57 +358,68 @@ function FollowUps({ ctrl, c, sid }) {
   }, children: label }, label)) });
 }
 function HuntWatch({ ctrl, c, sid, center, label }) {
-  const w = useValue(ctrl.watch.view), id = useId();
-  return hs('section', { 'aria-label': 'Hunt Watch', style: { ...panel(c), marginTop: 14 }, children: [
-    h('strong', { children: 'Hunt Watch' }),
-    h('p', { style: fine(c), children: w.active ? `Watching ${w.label} · 500 m` : 'Watch this spot for worthwhile catches.' }),
-    h('label', { htmlFor: id, style: fine(c), children: 'Alert me about' }),
-    h('select', { id, value: w.kind, disabled: w.active, onChange: e => ctrl.watch.configure({ ...w, kind: e.target.value }),
-      style: { width: '100%', background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: 8, marginTop: 4 },
-      children: Object.entries(WATCH_KINDS).map(([value, name]) => h('option', { value, children: name }, value)) }),
-    w.kind === 'iv' && hs('label', { style: { ...fine(c), display: 'block', marginTop: 8 }, children: ['Minimum IV % ',
-      h('input', { type: 'number', min: 0, max: 100, step: 1, value: w.minIV, disabled: w.active,
-        onChange: e => ctrl.watch.configure({ ...w, minIV: Number(e.target.value) }),
-        style: { width: 65, background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 6 } })] }),
-    h(Button, { c, primary: !w.active, style: { marginTop: 10 }, disabled: !w.active && !center,
-      onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop watch' : 'Watch this spot' }),
-    h('p', { role: 'status', style: fine(c), children: w.busy ? 'Checking existing observations…' : w.notice }),
+  const w = useValue(ctrl.watch.view);
+  const field = { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: '7px 8px', font: `12px ${font}` };
+  const status = w.busy ? 'Checking existing observations…'
+    : w.active ? `Watching ${w.label} · 500 m. ${w.notice}` : w.notice || 'Alerts you to new catches at this spot. It reads existing data about once a minute and never starts a scan.';
+  return hs('section', { 'aria-label': 'Hunt Watch', style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${c.line}` }, children: [
+    hs('div', { style: { ...rowStyle, gap: 6 }, children: [
+      h('strong', { style: { fontSize: 12, marginRight: 4 }, children: 'Hunt Watch' }),
+      h('select', { 'aria-label': 'Alert me about', value: w.kind, disabled: w.active, onChange: e => ctrl.watch.configure({ ...w, kind: e.target.value }),
+        style: { ...field, flex: '1 1 120px', minWidth: 0 }, children: Object.entries(WATCH_KINDS).map(([value, name]) => h('option', { value, children: name }, value)) }),
+      w.kind === 'iv' && h('input', { 'aria-label': 'Minimum IV %', type: 'number', min: 0, max: 100, step: 1, value: w.minIV, disabled: w.active,
+        onChange: e => ctrl.watch.configure({ ...w, minIV: Number(e.target.value) }), style: { ...field, width: 58 } }),
+      h(Button, { c, primary: !w.active, disabled: !w.active && !center, onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop' : 'Watch' })
+    ] }),
+    h('p', { role: 'status', style: { ...fine(c), margin: '6px 0 0' }, children: status }),
     w.error && h(ErrorNote, { c, message: w.error }),
     w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
-    w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' }),
-    h('small', { style: fine(c), children: 'Checks existing data about once a minute. No scans start. Stops when you change profile or connection. OS alerts appear when Hermes is in the background.' })
+    w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' })
   ] });
 }
-function CatchSummary({ ctrl, c, p, center, sid, compact = false }) {
-  const now = useValue(ctrl.clock), timer = expiry(p, now);
-  const rank = rankLabel(p);
+function IvBars({ c, p }) {
+  return h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 12 }, children:
+    [['Attack', p.iv_attack], ['Defense', p.iv_defense], ['Stamina', p.iv_stamina]].map(([name, v]) => hs('div', { role: 'img', 'aria-label': `${name} ${number(v) ? v : 'unknown'} of 15`, children: [
+      hs('div', { style: { ...fine(c), display: 'flex', justifyContent: 'space-between' }, children: [name, h('strong', { style: { color: c.fg }, children: number(v) ? v : '?' })] }),
+      h('div', { style: { height: 6, borderRadius: 3, background: c.raised, marginTop: 3, overflow: 'hidden' },
+        children: h('div', { style: { width: number(v) ? `${Math.min(15, Math.max(0, v)) / 15 * 100}%` : 0, height: '100%', background: v === 15 ? c.accent : c.blue } }) })
+    ] }, name)) });
+}
+function CatchSummary({ ctrl, c, p, center, sid, place, inPane = false }) {
+  const now = useValue(ctrl.clock), timer = expiry(p, now), gone = timer.expired;
+  const hl = highlight(p, c), rank = rankLabel(p), d = distanceBearing(center, p);
   return hs('div', { style: { minWidth: 0 }, children: [
-    hs('div', { style: { display: 'flex', alignItems: 'center', gap: 10 }, children: [
-      h(Initial, { c, p }),
-      hs('div', { style: { flex: 1, minWidth: 0 }, children: [
-        h('strong', { style: { display: 'block', fontSize: 15 }, children: text(p.name, 80) || 'Pokémon' }),
-        p.form_name && h('span', { style: fine(c), children: text(p.form_name, 60) }),
-        h('div', { style: fine(c), children: `${metric(p)}${number(p.cp) ? ' · CP ' + p.cp : ''}` }),
-        h('div', { style: fine(c), children: distanceLabel(center, p) })
+    hs('div', { style: { display: 'flex', alignItems: 'center', gap: 12 }, children: [
+      h(Mon, { ctrl, c, p, size: 64, dim: gone }),
+      hs('div', { style: { flex: 1, minWidth: 0, opacity: gone ? .65 : 1 }, children: [
+        hs('div', { style: { ...rowStyle, gap: 6 }, children: [
+          h('strong', { style: { fontSize: 16 }, children: text(p.name, 80) || 'Pokémon' }),
+          p.form_name && h('span', { style: fine(c), children: text(p.form_name, 60) }),
+          hl && h('span', { style: { font: `700 11px ${font}`, color: c.ink, background: hl.color, borderRadius: 999, padding: '2px 8px' }, children: hl.label })
+        ] }),
+        h('div', { style: { fontSize: 13 }, children: [metric(p), number(p.cp) && `CP ${p.cp}`, number(p.level) && `Lv ${p.level}`].filter(Boolean).join(' · ') }),
+        hs('div', { style: { ...fine(c), display: 'flex', alignItems: 'center', gap: 5 }, children: [
+          d && d.meters >= 10 && h(Arrow, { c, degrees: d.bearing }), distanceLabel(center, p, place)] })
       ] }),
-      hs('div', { style: { textAlign: 'right', flexShrink: 0 }, children: [
-        h('strong', { style: { display: 'block', fontSize: 17, fontVariantNumeric: 'tabular-nums', color: timer.low ? c.red : c.fg }, children: timer.label }),
-        h('small', { style: fine(c), children: timer.seconds > 0 ? (p.expiry_verified ? 'left' : 'estimated left') : '' })
-      ] })
+      timer.seconds > 0 ? hs('div', { style: { textAlign: 'right', flexShrink: 0 }, children: [
+        h('strong', { style: { display: 'block', fontSize: 18, fontVariantNumeric: 'tabular-nums', color: timer.low ? c.red : c.fg }, children: timer.label }),
+        h('small', { style: fine(c), children: p.expiry_verified ? 'left' : 'est. left' })
+      ] }) : h('span', { style: { ...fine(c), flexShrink: 0 }, children: timer.label })
     ] }),
-    !compact && h('div', { style: { ...fine(c), marginTop: 7 }, children: `Attack / Defense / Stamina: ${[p.iv_attack, p.iv_defense, p.iv_stamina].map(v => number(v) ? v : '?').join(' / ')}` }),
-    rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 5 }, children: rank }),
-    hs('div', { style: { ...rowStyle, marginTop: 10 }, children: [
+    !gone && h(IvBars, { c, p }),
+    !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 8 }, children: rank }),
+    !gone && hs('div', { style: { ...rowStyle, marginTop: 12 }, children: [
       h(Button, { c, primary: true, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
-      !compact && h(Button, { c, onClick: () => showInRadar(ctrl, sid, p, center), children: 'Show in Radar' })
+      !inPane && h(Button, { c, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show in Radar' })
     ] })
   ] });
 }
-function RadarSvg({ ctrl, c, s, sid }) {
+function RadarSvg({ ctrl, c, s, sid, ghost = false }) {
   const now = useValue(ctrl.clock), marks = s.observations.filter(p => !expiry(p, now).expired);
+  useValue(ctrl.iconRev);
   return hs('svg', { viewBox: '0 0 320 320', role: 'img', 'aria-label': `North-up radar, ${s.radius} metre radius from search point`,
-    style: { display: 'block', width: '100%', maxHeight: 390, background: c.bg, borderRadius: 12, margin: '12px 0' }, children: [
-      h('style', { children: '.pokeit-expiring{animation:pokeit-pulse 1.6s ease-out infinite}@keyframes pokeit-pulse{0%{opacity:.9}100%{opacity:.25}}@media(prefers-reduced-motion:reduce){.pokeit-expiring{animation:none}}' }),
+    style: { display: 'block', width: '100%', maxWidth: ghost ? 240 : undefined, maxHeight: 390, background: c.bg, borderRadius: 12, margin: ghost ? '12px auto' : 0, opacity: ghost ? .55 : 1 }, children: [
+      h('style', { children: CSS }),
       ...[45, 90, 136].map(r => h('circle', { cx: 160, cy: 160, r, fill: 'none', stroke: c.line, strokeDasharray: r === 136 ? undefined : '3 5' }, r)),
       h('path', { d: 'M160 24V296 M24 160H296', stroke: c.line, strokeDasharray: '2 6' }),
       ...[['N',160,16],['E',308,164],['S',160,314],['W',12,164]].map(([t,x,y]) => h('text', { x, y, textAnchor: 'middle', fill: c.muted, fontSize: 10, children: t }, t)),
@@ -361,52 +428,71 @@ function RadarSvg({ ctrl, c, s, sid }) {
         const d = distanceBearing(s.center, p); if (!d || d.meters > s.radius) return null;
         const a = d.bearing * Math.PI / 180, r = d.meters / s.radius * 136;
         const x = 160 + Math.sin(a) * r, y = 160 - Math.cos(a) * r, selected = s.selected === p.observation_id;
-        const color = p.iv_percent === 100 ? c.accent : p.iv_percent === 0 ? c.blue : hasRankOne(p) ? c.green : c.muted;
+        const color = highlight(p, c)?.color || c.muted, url = ctrl.icon(p);
         const choose = () => ctrl.update(sid, { selected: p.observation_id });
         return hs('g', { role: 'button', tabIndex: 0, 'aria-label': `${text(p.name)} ${metric(p)}, ${Math.round(d.meters)} metres ${d.direction}`,
           onClick: choose, onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } }, style: { cursor: 'pointer' }, children: [
             h('title', { children: `${text(p.name)} · ${metric(p)} · ${Math.round(d.meters)} m ${d.direction}` }),
-            selected && h('circle', { cx: x, cy: y, r: 19, fill: 'none', stroke: c.accent, strokeWidth: 2 }),
-            expiry(p, now).low && h('circle', { cx: x, cy: y, r: 21, fill: 'none', stroke: c.red, className: 'pokeit-expiring' }),
-            h('circle', { cx: x, cy: y, r: 12, fill: c.raised, stroke: color, strokeWidth: 2 }),
-            h('text', { x, y: y + 4, fill: c.fg, textAnchor: 'middle', fontWeight: 700, fontSize: 11, children: text(p.name, 1) || '?' })
+            selected && h('circle', { cx: x, cy: y, r: 21, fill: 'none', stroke: c.accent, strokeWidth: 2 }),
+            expiry(p, now).low && h('circle', { cx: x, cy: y, r: 24, fill: 'none', stroke: c.red, className: 'pokeit-pulse' }),
+            h('circle', { cx: x, cy: y, r: 15, fill: c.raised, stroke: color, strokeWidth: 2 }),
+            url ? h('image', { href: url, x: x - 13, y: y - 13, width: 26, height: 26 })
+              : h('text', { x, y: y + 4, fill: c.fg, textAnchor: 'middle', fontWeight: 700, fontSize: 11, children: text(p.name, 1) || '?' })
           ] }, p.observation_id);
       }),
       h('circle', { cx: 160, cy: 160, r: 7, fill: c.accent, stroke: c.bg, strokeWidth: 3 }),
       !s.center && h('text', { x: 160, y: 190, fill: c.muted, textAnchor: 'middle', fontSize: 12, children: 'Your next hunt starts here' })
     ] });
 }
+function ResultRow({ ctrl, c, p, center, selected, now, onSelect }) {
+  const timer = expiry(p, now), d = distanceBearing(center, p), hl = highlight(p, c);
+  return hs('button', { type: 'button', 'aria-pressed': selected, onClick: onSelect, style: { display: 'grid', gridTemplateColumns: '40px 1fr auto', alignItems: 'center', gap: 10,
+    width: '100%', textAlign: 'left', color: c.fg, font: `13px ${font}`, background: selected ? c.raised : 'transparent',
+    border: `1px solid ${selected ? c.accent : 'transparent'}`, borderRadius: 10, padding: '6px 8px', cursor: 'pointer' }, children: [
+    h(Mon, { ctrl, c, p, size: 40 }),
+    hs('span', { style: { minWidth: 0 }, children: [
+      h('strong', { style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: text(p.name, 60) || 'Pokémon' }),
+      h('span', { style: fine(c), children: [metric(p), hl?.label, d && `${amount(d.meters)} ${d.direction}`].filter(Boolean).join(' · ') })
+    ] }),
+    h('span', { style: { fontVariantNumeric: 'tabular-nums', fontSize: 12, color: timer.low ? c.red : c.muted }, children: timer.seconds > 0 ? timer.label : '' })
+  ] });
+}
 function RadarPane({ ctrl, sessionId }) {
   const c = useColors(), active = useActiveSession(), sid = sessionId || active, fieldId = useId();
   const s = useRadar(ctrl, sid), now = useValue(ctrl.clock);
   const [query, setQuery] = useState(''), [places, setPlaces] = useState([]), [finding, setFinding] = useState(false), [placeError, setPlaceError] = useState('');
-  const selected = s.observations.find(p => p.observation_id === s.selected);
+  const live = s.observations.filter(p => !expiry(p, now).expired);
+  const selected = s.observations.find(p => p.observation_id === s.selected), place = named(s.label);
+  const last = !s.center && !s.busy ? ctrl.lastSpot() : null;
   useEffect(() => { setPlaces([]); setPlaceError(''); setQuery(''); }, [sid]);
-  async function locate(e) {
-    e.preventDefault(); if (!query.trim() || finding) return;
+  async function lookup(q) {
+    if (!q || finding) return;
     const fromSession = sid, fromConnection = gatewayActivationEpoch();
     setFinding(true); setPlaceError(''); setPlaces([]);
     try {
-      const result = await ctrl.api('/place?' + new URLSearchParams({ query: query.trim(), limit: 5 }));
+      const result = await ctrl.api('/place?' + new URLSearchParams({ query: q, limit: 5 }));
       if ((!sessionId && fromSession !== activeSession()) || fromConnection !== gatewayActivationEpoch()) return;
       const rows = Array.isArray(result.results) ? result.results : Array.isArray(result.places) ? result.places : [];
-      setPlaces(rows);
       if (!rows.length) setPlaceError('No match yet. Try an address, intersection or landmark and city.');
+      else if (rows.length === 1) choose(rows[0]);
+      else setPlaces(rows);
     } catch (e) { if (sessionId || fromSession === activeSession()) setPlaceError(e.message); } finally { setFinding(false); }
   }
   function choose(p) {
-    if (p.requires_specific_location || !number(p.lat) || !number(p.lon)) { setPlaceError('Choose a nearby entrance, address or landmark so this scan covers a useful spot.'); return; }
+    if (p.requires_specific_location || !number(p.lat) || !number(p.lon)) { setPlaces([p]); setPlaceError('Choose a nearby entrance, address or landmark so this scan covers a useful spot.'); return; }
     setPlaces([]); setPlaceError(''); void ctrl.read(sid, { lat: p.lat, lon: p.lon }, text(p.choice_label || p.label || p.name, 100), s.radius);
   }
   const status = s.coverage?.scan_plan?.status;
   const age = s.queriedAt ? Math.max(0, Math.floor((now - Date.parse(s.queriedAt)) / 1000)) : null;
+  const chip = (label, run) => h(Button, { c, disabled: finding || s.busy, onClick: run, children: label }, label);
   return hs('section', { 'aria-label': 'PokeIt Radar', style: { background: c.surface, color: c.fg, padding: 14, overflowY: 'auto', height: '100%', fontFamily: font, boxSizing: 'border-box' }, children: [
+    h(Styles, {}),
     hs('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }, children: [
       hs('div', { children: [hs('h2', { style: { fontSize: 19, fontWeight: 800, margin: 0 }, children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), ' Radar'] }),
         h('p', { style: { ...fine(c), margin: '4px 0 0' }, children: s.label })] }),
       h(Button, { c, disabled: !s.center || s.busy, onClick: () => void ctrl.read(sid, s.center, s.label, s.radius), children: s.busy ? 'Reading…' : 'Refresh' })
     ] }),
-    hs('form', { onSubmit: locate, style: { marginTop: 14 }, children: [
+    hs('form', { onSubmit: e => { e.preventDefault(); void lookup(query.trim()); }, style: { marginTop: 14 }, children: [
       h('label', { htmlFor: fieldId, style: { ...fine(c), display: 'block', marginBottom: 5 }, children: 'Pick a precise spot' }),
       hs('div', { style: { display: 'flex', gap: 6 }, children: [
         h('input', { id: fieldId, value: query, maxLength: 160, onChange: e => setQuery(e.target.value), placeholder: 'Landmark and city',
@@ -416,38 +502,60 @@ function RadarPane({ ctrl, sessionId }) {
       h(ErrorNote, { c, message: placeError }),
       ...places.map((p, i) => h(Button, { c, style: { width: '100%', marginTop: 6, textAlign: 'left' }, onClick: () => choose(p), children: text(p.choice_label || p.label || p.name, 160) || 'Unnamed location' }, i))
     ] }),
-    hs('div', { style: { ...rowStyle, marginTop: 10, justifyContent: 'space-between' }, children: [
-      hs('label', { style: fine(c), children: ['Radius ', h('select', { 'aria-label': 'Radar radius', value: s.radius, onChange: e => {
-        const radius = Number(e.target.value); if (s.center) void ctrl.read(sid, s.center, s.label, radius); else ctrl.update(sid, { radius });
-      }, style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 5 }, children: [100,250,500,1000,2000].map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) })] }),
-      h('span', { style: fine(c), children: 'North up · read only' })
-    ] }),
     h(ErrorNote, { c, message: s.error }),
-    status === 'needs_scan' && hs('div', { style: { ...panel(c), marginTop: 10, padding: 10 }, children: [
-      h('p', { style: { ...fine(c), margin: '0 0 6px' }, children: 'No recent scan here. These are existing observations.' }),
-      h(Button, { c, onClick: () => void draft(`Check ${s.label} and scan if needed. Use this selected map pin: ${mapUrl(s.center, s.radius)}`, sid), children: 'Ask Hermes to scan' })
+    !s.center ? hs('div', { style: { textAlign: 'center', marginTop: 8 }, children: [
+      h(RadarSvg, { ctrl, c, s, sid, ghost: true }),
+      h('p', { style: { margin: '6px 0 4px', fontSize: 15, fontWeight: 650 }, children: 'Pick a spot to see what is worth catching.' }),
+      h('p', { style: fine(c), children: 'Search above, or try an example. Reading only; no scan starts here.' }),
+      hs('div', { style: { ...rowStyle, justifyContent: 'center', marginTop: 6 }, children: [
+        last && chip(`Resume ${last.label}`, () => void ctrl.read(sid, last.center, last.label, last.radius)),
+        ...EXAMPLES.map(([label, search]) => chip(label, () => { setQuery(search); void lookup(search); }))
+      ] })
+    ] }) : hs('div', { children: [
+      hs('div', { style: { ...rowStyle, marginTop: 10, justifyContent: 'space-between' }, children: [
+        hs('label', { style: fine(c), children: ['Radius ', h('select', { 'aria-label': 'Radar radius', value: s.radius, onChange: e => void ctrl.read(sid, s.center, s.label, Number(e.target.value)),
+          style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 5 }, children: RADII.map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) })] }),
+        h('span', { style: fine(c), children: 'North up · read only' })
+      ] }),
+      status === 'needs_scan' && hs('div', { style: { ...panel(c), marginTop: 10, padding: 10 }, children: [
+        h('p', { style: { ...fine(c), margin: '0 0 6px' }, children: 'No recent scan here. These are existing observations.' }),
+        h(Button, { c, onClick: () => void draft(`Check ${s.label} and scan if needed. Use this selected map pin: ${mapUrl(s.center, s.radius)}`, sid), children: 'Ask Hermes to scan' })
+      ] }),
+      status === 'in_progress' && h('p', { style: fine(c), children: 'A scan is in progress here. Refresh after it finishes.' }),
+      s.queriedAt && !s.coverage && h('p', { style: fine(c), children: 'Coverage freshness could not be checked. These are existing observations.' }),
+      hs('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start', marginTop: 12 }, children: [
+        hs('div', { children: [
+          h(RadarSvg, { ctrl, c, s, sid }),
+          hs('div', { style: { ...rowStyle, justifyContent: 'space-between', marginTop: 8, ...fine(c) }, children: [
+            h('span', { children: `${live.length} shown${s.truncated ? ' · limited sample' : ''}` }),
+            h('span', { children: age === null ? '' : `Read ${age < 60 ? age + 's' : Math.floor(age / 60) + 'm'} ago` })
+          ] })
+        ] }),
+        hs('div', { style: { minWidth: 0 }, children: [
+          s.quietPick && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No highlights in this read. This is the highest observed IV catch.' }),
+          !s.busy && s.queriedAt && !s.observations.length && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No matching catches in this read. Try nearby raids or open the live map.' }),
+          selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
+          live.length > 1 && h('div', { 'aria-label': 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
+            children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) }),
+          h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open full map ↗' })
+        ] })
+      ] }),
+      h(FollowUps, { ctrl, c, sid }),
+      h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label })
     ] }),
-    status === 'in_progress' && h('p', { style: fine(c), children: 'A scan is in progress here. Refresh after it finishes.' }),
-    s.queriedAt && !s.coverage && h('p', { style: fine(c), children: 'Coverage freshness could not be checked. These are existing observations.' }),
-    h(RadarSvg, { ctrl, c, s, sid }),
-    hs('div', { style: { ...rowStyle, justifyContent: 'space-between', ...fine(c) }, children: [
-      h('span', { children: `${s.observations.filter(p => !expiry(p, now).expired).length} shown${s.truncated ? ' · limited sample' : ''}` }),
-      h('span', { children: age === null ? 'Waiting for a location' : `Read ${age < 60 ? age + 's' : Math.floor(age / 60) + 'm'} ago` })
-    ] }),
-    s.quietPick && h('p', { style: fine(c), children: 'No highlights returned. Here is the highest observed IV catch.' }),
-    s.center && !s.busy && s.queriedAt && !s.observations.length && h('p', { style: fine(c), children: 'No matching catches in this read. Try nearby raids or open the live map.' }),
-    selected && h('div', { style: { ...panel(c), background: c.bg, marginTop: 12 }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, compact: true }) }),
-    s.observations.length > 1 && h('select', { 'aria-label': 'Select a catch', value: s.selected || '', onChange: e => ctrl.update(sid, { selected: e.target.value }),
-      style: { marginTop: 8, width: '100%', background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: 8 }, children: s.observations.map(p => h('option', { value: p.observation_id, children: `${text(p.name)} · ${metric(p)}` }, p.observation_id)) }),
-    s.center && h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open full map ↗' }),
-    h(FollowUps, { ctrl, c, sid }),
-    h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label }),
-    h('p', { style: { ...fine(c), marginTop: 12 }, children: 'The pin is the search point, not your live GPS position. No new scans start in this pane.' }),
+    h('p', { style: { ...fine(c), marginTop: 16 }, children: 'The pin is the search point, not your live GPS position. No new scans start in this pane.' }),
     h(Button, { c, style: { background: 'transparent', fontSize: 11 }, onClick: () => void ctrl.debug(), children: 'Copy debug info' })
   ] });
 }
+function Skeleton({ c, label }) {
+  const bar = (width, height, top) => h('div', { className: 'pokeit-pulse', style: { height, width, borderRadius: height / 2, background: c.raised, marginTop: top } });
+  return hs('div', { role: 'status', 'aria-label': label, style: { display: 'flex', gap: 12, alignItems: 'center' }, children: [
+    h('span', { className: 'pokeit-pulse', style: { width: 64, height: 64, borderRadius: 19, background: c.raised, flexShrink: 0 } }),
+    hs('div', { style: { flex: 1 }, children: [bar('45%', 14, 0), bar('70%', 10, 9), bar('55%', 10, 7)] })
+  ] });
+}
 function CatchCard({ ctrl, attrs, sid, streaming }) {
-  const c = useColors(), args = catchAttributes(attrs), key = args ? JSON.stringify(args) : '';
+  const c = useColors(), args = catchAttributes(attrs), place = placeName(attrs), key = args ? JSON.stringify(args) : '';
   const [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!key || streaming) return;
@@ -455,51 +563,64 @@ function CatchCard({ ctrl, attrs, sid, streaming }) {
     let current = true; setData(null); setError('');
     ctrl.api('/card?' + new URLSearchParams(JSON.parse(key))).then(d => {
       if (!current) return; setData(d);
-      if (d.observation && d.status === 'observed') ctrl.adopt(targetSid, d.observation, d.origin);
+      if (d.observation && d.status === 'observed') ctrl.adopt(targetSid, d.observation, d.origin, place);
     }).catch(e => { if (current) setError(e.message); });
     return () => { current = false; };
-  }, [ctrl, key, sid, streaming, retry]);
-  if (!args) return h('div', { style: panel(c), children: 'This catch card has an invalid location or identifier.' });
-  return hs('article', { 'aria-label': 'PokeIt catch', style: { ...panel(c), maxWidth: 560, margin: '8px 0' }, children: [
-    !data && !error && h('p', { style: fine(c), children: streaming ? 'Preparing catch card…' : 'Checking this catch…' }),
+  }, [ctrl, key, place, sid, streaming, retry]);
+  if (!args) return h('p', { style: { ...fine(c), margin: '8px 0' }, children: 'This catch card has an invalid location or identifier.' });
+  // A catch that is gone needs a line, not a box.
+  if (data && data.status !== 'observed') return h('p', { role: 'status', style: { ...fine(c), margin: '8px 0' },
+    children: data.status === 'expired' ? 'This catch has expired.' : data.truncated ? 'This catch is not in the latest limited read. It may still be around.' : 'This catch is no longer in the latest read. It may have expired.' });
+  const hl = data?.observation && highlight(data.observation, c);
+  return hs('article', { 'aria-label': 'PokeIt catch', style: { ...panel(c), maxWidth: 560, margin: '8px 0', borderLeft: `4px solid ${hl ? hl.color : c.line}` }, children: [
+    h(Styles, {}),
+    !data && !error && h(Skeleton, { c, label: streaming ? 'Preparing catch card' : 'Checking this catch' }),
     error && hs('div', { children: [h(ErrorNote, { c, message: error }), h(Button, { c, onClick: () => setRetry(v => v + 1), children: 'Try again' })] }),
-    data?.observation && h(CatchSummary, { ctrl, c, p: data.observation, center: data.origin, sid }),
-    data && data.status !== 'observed' && h('p', { style: fine(c), children: data.status === 'expired' ? 'This catch has passed its verified expiry.' : 'This catch was not in the latest read. It may have expired or be missing from a limited result.' }),
+    data?.observation && h(CatchSummary, { ctrl, c, p: data.observation, center: data.origin, sid, place }),
     data?.truncated && h('small', { style: fine(c), children: 'The source returned a limited sample.' })
   ] });
 }
 function ScanCard({ ctrl, attrs, streaming }) {
   const c = useColors(), id = SCAN_ID.test(attrs?.id || '') ? attrs.id : null;
-  const now = useValue(ctrl.clock), [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0), [stoppedAt, setStoppedAt] = useState(null);
+  const now = useValue(ctrl.clock), [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!id || streaming) return;
-    let current = true, cancel = () => {}; setError(''); setData(null); setStoppedAt(null);
+    let current = true, cancel = () => {}; setError(''); setData(null);
     async function poll() {
       try {
         const d = await ctrl.api('/scan/' + id); if (!current) return;
         setData(d); const p = scanProgress(d);
         if (!p.terminal) cancel = ctrl.ctx.setTimeout(poll, p.delay * 1000);
-        else setStoppedAt(Date.now());
       } catch (e) { if (current) setError(e.message); }
     }
     void poll(); return () => { current = false; cancel(); };
   }, [ctrl, id, streaming, retry]);
-  if (!id) return h('div', { style: panel(c), children: 'This scan card has an invalid request identifier.' });
-  const p = scanProgress(data), labels = { queued: 'Scouts are working', dispatch_unknown: 'Waiting for scan confirmation', data_refreshed: 'Scan complete', existing_coverage: 'Existing coverage reused', partial_unverified: 'Partial results — some points unverified', failed: 'Scan could not complete' };
-  const elapsed = number(data?.created_at) ? Math.max(0, Math.floor(((stoppedAt ?? now) / 1000) - data.created_at)) : null;
+  if (!id) return h('p', { style: { ...fine(c), margin: '8px 0' }, children: 'This scan card has an invalid request identifier.' });
+  const p = scanProgress(data), status = data?.status;
+  const labels = { queued: 'Scouts are working', dispatch_unknown: 'Waiting for scan confirmation', data_refreshed: 'Scan complete', existing_coverage: 'Existing coverage reused', partial_unverified: 'Partial results — some points unverified', failed: 'Scan could not complete' };
+  const created = number(data?.created_at) ? new Date(data.created_at * 1000) : null;
+  const requested = created && !Number.isNaN(created.getTime()) ? created.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  const elapsed = created ? Math.max(0, Math.floor(now / 1000 - data.created_at)) : null;
+  const meta = p.terminal ? (requested ? `Requested at ${requested}` : '') : elapsed !== null ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')} elapsed` : '';
+  const tone = status === 'failed' ? c.red : p.terminal ? (status === 'partial_unverified' ? c.accent : c.green) : c.accent;
+  const next = !p.terminal && p.total ? p.done : -1;
   return hs('article', { 'aria-label': 'PokeIt scan progress', style: { ...panel(c), maxWidth: 560, margin: '8px 0' }, children: [
-    h('strong', { style: { fontSize: 15 }, children: labels[data?.status] || 'Checking scan status…' }),
+    h(Styles, {}),
+    hs('div', { style: { display: 'flex', alignItems: 'center', gap: 8 }, children: [
+      h('span', { 'aria-hidden': true, className: p.terminal ? undefined : 'pokeit-pulse', style: { width: 9, height: 9, borderRadius: '50%', background: tone, flexShrink: 0 } }),
+      h('strong', { style: { fontSize: 15 }, children: labels[status] || 'Checking scan status…' })
+    ] }),
     hs('div', { style: { display: 'flex', gap: 16, alignItems: 'center', marginTop: 10 }, children: [
       hs('svg', { viewBox: '0 0 180 154', role: 'img', 'aria-label': p.total ? `${p.done} of ${p.total} points confirmed or covered` : 'Waiting for point counts',
         style: { width: 180, flexShrink: 1 }, children: Array.from({ length: Math.min(p.total || 49, 100) }, (_, i) => {
           const x = 24 + (i % 7) * 21 + (Math.floor(i / 7) % 2) * 10, y = 14 + Math.floor(i / 7) * 21;
           const color = p.total && i < p.done ? c.green : p.total && i >= p.total - p.failed ? c.red : p.total && i >= p.total - p.failed - p.unverified ? c.accent : c.line;
-          return h('circle', { cx: x, cy: y, r: 6.5, fill: color }, i);
+          return h('circle', { cx: x, cy: y, r: 6.5, fill: color, className: i === next ? 'pokeit-pulse' : undefined, style: { transition: 'fill .5s ease' } }, i);
         }) }),
       hs('div', { children: [
         h('div', { style: { fontSize: 27, fontWeight: 750, fontVariantNumeric: 'tabular-nums' }, children: p.total ? `${p.done}/${p.total}` : '—' }),
         h('div', { style: fine(c), children: 'points confirmed or covered' }),
-        elapsed !== null && h('div', { style: fine(c), children: `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2,'0')} ${p.terminal ? 'request age at check' : 'elapsed'}` }),
+        meta && h('div', { style: fine(c), children: meta }),
         p.unverified > 0 && h('div', { style: { ...fine(c), color: c.accent }, children: `${p.unverified} unverified` }),
         p.failed > 0 && h('div', { style: { ...fine(c), color: c.red }, children: `${p.failed} failed` })
       ] })
