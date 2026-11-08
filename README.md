@@ -61,13 +61,7 @@ The Desktop installer adds the interface locally and the backend to your selecte
 
 ## If the tools disappear
 
-Run `/reload-mcp` in the chat, or start a new one. If Hermes still can't find the server, add it yourself and keep approvals on:
-
-```sh
-hermes --profile YOUR_PROFILE mcp add pokeit --url https://mcp.pokeit.cc/mcp
-hermes --profile YOUR_PROFILE config set mcp_servers.pokeit.trust untrusted
-hermes --profile YOUR_PROFILE mcp test pokeit
-```
+In Hermes CLI, run `/reload-mcp`. On Desktop, close and reopen the app, select the profile where PokeIt is enabled, and start a fresh chat. Desktop doesn't expose that slash command; reopening the app reconnects it without restarting your remote gateway.
 
 ## Other clients
 

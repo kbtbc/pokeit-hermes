@@ -13,8 +13,8 @@ const text = (s, n = 180) => typeof s === 'string' ? s.slice(0, n) : '';
 const number = n => typeof n === 'number' && Number.isFinite(n);
 
 export function coordinate(v, max) {
-  if (typeof v !== 'string' || !/^-?(?:\d{1,3}(?:\.\d{1,12})?|\.\d{1,12})$/.test(v)) return null;
-  const n = Number(v); return Math.abs(n) <= max ? n : null;
+  if (typeof v !== 'string' || !/^-?(?:\d{1,3}(?:\.\d{1,17})?|\.\d{1,17})$/.test(v)) return null;
+  const n = Number(v); return Number.isFinite(n) && Math.abs(n) <= max ? n : null;
 }
 export function catchAttributes(attrs) {
   const lat = coordinate(attrs?.lat, 85), lon = coordinate(attrs?.lon, 180);

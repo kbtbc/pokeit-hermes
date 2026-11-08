@@ -28,9 +28,11 @@ await writeFile(resolve(output, 'sdk.js'), sdk);
 const main = `
 import React,{useState} from 'react'; import {createRoot} from 'react-dom/client';
 import plugin from ${JSON.stringify(resolve(project, 'desktop/plugin.js'))};
+import {segmentTranscriptDirectives} from ${JSON.stringify(resolve(root, 'apps/desktop/src/lib/transcript-directives.ts'))};
 import {mode} from './sdk.js';
 const h=React.createElement, contributions=[], calls=[],disposers=[];window.calls=calls;window.drafts=[];window.notices=[];
-const center={lat:34.0746,lon:-84.2922}, now=Date.now();
+const center={lat:34.074612345678901,lon:-84.29221234567890}, now=Date.now();
+const cardDirective=segmentTranscriptDirectives('::pokeit-catch{id="pid_fixture_a" lat="34.076000" lon="-84.290000" origin_lat="34.074612345678901" origin_lon="-84.29221234567890"}')[0].directive;
 const catches=[{observation_id:'pid_fixture_a',name:'Dratini',lat:34.076,lon:-84.290,iv_percent:100,iv_attack:15,iv_defense:15,iv_stamina:15,cp:391,expires_at:new Date(now+14*60000).toISOString(),expiry_verified:true,map_url:'https://pokeit.cc/pokemon/pid_fixture_a'},
 {observation_id:'pid_fixture_b',name:'Murkrow',lat:34.0733,lon:-84.2931,iv_percent:73.3,iv_attack:0,iv_defense:15,iv_stamina:15,cp:711,expires_at:new Date(now+84000).toISOString(),expiry_verified:false,map_url:'https://pokeit.cc/pokemon/pid_fixture_b',pvp_iv_rankings:{ultra:[{rank:1,ranked_species_name:'Honchkrow',same_species_as_observation:false}]}}];
 let scanCalls=0;
@@ -39,7 +41,7 @@ rest:async path=>{calls.push(path);let data;const u=new URL(path,'https://test')
 if(u.pathname==='/place')data={places:[{...center,choice_label:'Alpharetta City Hall, Georgia',requires_specific_location:false}]};
 else if(u.pathname==='/nearby')data={location:center,observations:catches,queried_at:new Date().toISOString(),truncated:false};
 else if(u.pathname==='/coverage')data={scan_plan:{status:'existing_coverage'}};
-else if(u.pathname==='/card')data={observation:catches.find(p=>p.observation_id===u.searchParams.get('id')),origin:center,status:'observed',truncated:false};
+else if(u.pathname==='/card')data={observation:catches.find(p=>p.observation_id===u.searchParams.get('id')),origin:u.searchParams.has('origin_lat')&&u.searchParams.has('origin_lon')?{lat:Number(u.searchParams.get('origin_lat')),lon:Number(u.searchParams.get('origin_lon'))}:null,status:'observed',truncated:false};
 else if(u.pathname.startsWith('/scan/')){scanCalls++;data={status:scanCalls===1?'queued':'data_refreshed',total_points:49,counts:{confirmed:scanCalls===1?17:42,existing_area:7,pending:scanCalls===1?25:0,failed:0,unverified:0},created_at:now/1000-35,poll_after_seconds:5,map_url:'https://pokeit.cc/map?lat=34.0746&lon=-84.2922'};}
 else if(u.pathname==='/health')data={reachable:true,tool_count:15};
 else throw Error('Unexpected route '+path);return{ok:true,data};}};
@@ -49,7 +51,7 @@ h('strong',{style:{color:'#e89c22'}},'SYNTHETIC UI TEST — NOT LIVE SIGHTINGS')
 h('button',{id:'theme',onClick:()=>{mode.set(!light?'light':'dark');setLight(!light)}},'Toggle theme'),
 h('div',{style:{display:'grid',gridTemplateColumns:'1fr 360px',gap:24,marginTop:20}},
 h('div',null,h('p',{style:{color:'#a9b6d3'}},'A Desktop catch and scan card from synthetic tool responses'),
-contributions.find(c=>c.id==='catch').data.render({attrs:{id:'pid_fixture_a',lat:'34.076',lon:'-84.290',origin_lat:'34.0746',origin_lon:'-84.2922'},sessionId:'fixture',streaming:false}),
+contributions.find(c=>c.id==='catch').data.render({attrs:cardDirective.attrs,sessionId:'fixture',streaming:false}),
 contributions.find(c=>c.id==='scan').data.render({attrs:{id:'0123456789abcdefghijklmnopqrstuv'},sessionId:'fixture',streaming:false})),
 h('div',{style:{height:980}},radar.render())))}
 createRoot(document.getElementById('root')).render(h(App));
@@ -67,6 +69,9 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.getByText('100% IV · CP 391').first().waitFor();
+  const cardQuery=new URL((await page.evaluate(()=>window.calls)).find(p=>p.startsWith('/card?')),'https://test');
+  assert.equal(Number(cardQuery.searchParams.get('origin_lon')),Number('-84.29221234567890'));
+  assert.equal(await page.getByText('Distance from you unknown',{exact:true}).count(),0);
   await page.getByLabel('Pick a precise spot').fill('Alpharetta City Hall');
   await page.getByRole('button',{name:'Find',exact:true}).click();
   await page.getByRole('button',{name:'Alpharetta City Hall, Georgia'}).click();

@@ -30,6 +30,21 @@ test('untrusted directive IDs and coordinates are bounded', () => {
   ]) assert.equal(ui.catchAttributes(attrs), null);
   assert.equal(ui.catchAttributes({ id: 'pid_1', lat: '0', lon: '0' }).lat, 0);
 });
+test('geocoder origin precision survives catch directives without accepting unbounded numbers', () => {
+  const attrs = { id: 'pid_precision', lat: '34.076000', lon: '-84.290000',
+    origin_lat: '34.074612345678901', origin_lon: '-84.29221234567890' };
+  const parsed = ui.catchAttributes(attrs);
+  assert.equal(parsed.origin_lat, Number(attrs.origin_lat));
+  assert.equal(parsed.origin_lon, Number(attrs.origin_lon));
+  const query = new URLSearchParams(parsed);
+  assert.equal(Number(query.get('origin_lon')), Number(attrs.origin_lon));
+  assert.ok(ui.distanceBearing({ lat: parsed.origin_lat, lon: parsed.origin_lon }, parsed).meters > 0);
+  assert.equal(ui.coordinate('34.12345678901234567', 85), Number('34.12345678901234567'));
+  for (const value of ['34.123456789012345678', '34.' + '1'.repeat(1000), 'NaN', 'Infinity', '1e1', '34junk', ' 34', '86']) {
+    assert.equal(ui.coordinate(value, 85), null);
+    assert.equal(ui.catchAttributes({ ...attrs, origin_lat: value }).origin_lat, undefined);
+  }
+});
 test('map links cannot open another site, credentials, or an unsupported path', () => {
   assert.ok(ui.safeMapUrl('https://pokeit.cc/pokemon/pid_abc'));
   assert.ok(ui.safeMapUrl('https://pokeit.cc/map?lat=34&lon=-84&view=1'));
