@@ -36,7 +36,7 @@ Nearby reads include `game_context` from official articles refreshed every two h
 
 ## Desktop cards
 
-When `desktop_preview` is available (including in the deferred tool catalog), include a card for each recommended catch, up to three, each on its own line: `::pokeit-catch{id="OBSERVATION_ID" lat="CATCH_LAT" lon="CATCH_LON" origin_lat="SEARCH_LAT" origin_lon="SEARCH_LON" place="SEARCH_PLACE"}`. Use exact returned fields and the known search origin for direction; omit only unknown origin, and set `place` to the landmark you searched. After an approved scan, add `::pokeit-scan{id="REQUEST_ID"}` with the real ID. A card shows species, IVs, distance and time left, so say which catch to go for and why instead of repeating those figures; keep the map link. Never emit directives on CLI, Telegram or Discord. Cards read data; they never start scans.
+When `desktop_preview` is available (including in the deferred tool catalog), include a card for each recommended catch, up to three, each on its own line: `::pokeit-catch{id="OBSERVATION_ID" lat="CATCH_LAT" lon="CATCH_LON" origin_lat="SEARCH_LAT" origin_lon="SEARCH_LON" place="SEARCH_PLACE"}`. The first card is your top pick; give the others `variant="compact"`. Use exact returned fields and the known search origin for direction; omit only unknown origin, and set `place` to the landmark you searched. After an approved scan, add `::pokeit-scan{id="REQUEST_ID"}` with the real ID. A card shows species, IVs, distance and time left, so say which catch to go for and why instead of repeating those figures; keep the map link. Never emit directives on CLI, Telegram or Discord. Cards read data; they never start scans.
 
 ## Refusals
 

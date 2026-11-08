@@ -1,5 +1,12 @@
 # PokeIt release notes
 
+## 0.1.14 · November 7, 2026 · 10:45 PM ET (EST, UTC-05:00)
+
+- The chat cards are now a trainer briefing. The top pick is a hero card with large art and a glow, sparkles on a hundo, a compass to the catch, segmented IV bars, a countdown and a walking guide ("Worth the walk", "Tight" or "Probably too far"). The guide is a straight line at 5 km/h from the place you searched, not from you.
+- Other recommended catches are compact rows with the same guide, plus Map and Radar buttons. The skill asks agents to mark them `variant="compact"`.
+- Scan cards are a progress ring that fills as points are confirmed, with a check when the scan completes.
+- A catch that expires while its card is on screen folds into a quiet row.
+
 ## 0.1.13 · November 7, 2026 · 9:50 PM ET (EST, UTC-05:00)
 
 - Desktop redesign. Catch cards and the radar show the species art from the PokeIt map's icon set, the IVs as bars, a Hundo, Nundo or PvP #1 badge, and the direction and distance from the place you searched ("447 m SE of Alpharetta City Hall").

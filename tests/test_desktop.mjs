@@ -140,6 +140,27 @@ test('place names are plain display text and stay out of service requests', () =
   assert.equal(ui.catchAttributes({ id: 'pid_1', lat: '1', lon: '1', place: 'Somewhere' }).place, undefined);
 });
 
+test('the walking guide is a straight line at 5 km/h against the time left, and says when it cannot tell', () => {
+  const ok = ui.walkVerdict(256, 835, true);
+  assert.equal(ok.tone, 'ok'); assert.equal(ok.label, 'Worth the walk');
+  assert.equal(ok.detail, '3 min on foot, 10 min to spare'); assert.equal(ok.note, 'Worth it: 3 min, 13:55 left');
+  assert.equal(ui.walkVerdict(256, 835, false).detail, '3 min on foot, ~10 min to spare');
+  const tight = ui.walkVerdict(500, 480, true);
+  assert.equal(tight.tone, 'tight'); assert.equal(tight.detail, '6 min on foot, 8:00 left');
+  const far = ui.walkVerdict(167, 79, false);
+  assert.equal(far.tone, 'far'); assert.equal(far.detail, '2 min on foot, only ~1:19 left'); assert.equal(far.note, 'Too far: 2 min, ~1:19 left');
+  assert.equal(ui.walkVerdict(5, 600, true).detail, 'Right here, 10 min to spare');
+  assert.equal(ui.walkVerdict(5, 600, true).note, 'Worth it: right here, 10:00 left');
+  for (const [m, s] of [[null, 100], [100, 0], [100, -5], [NaN, 100], [100, null], [100, Infinity]]) assert.equal(ui.walkVerdict(m, s), null);
+});
+
+test('only the exact word compact asks for the compact card', () => {
+  assert.equal(ui.catchVariant({ variant: 'compact' }), 'compact');
+  for (const v of ['Compact', 'full', 'compact ', '', undefined, 5]) assert.equal(ui.catchVariant({ variant: v }), 'full');
+  assert.equal(ui.catchVariant(undefined), 'full');
+  assert.equal(ui.catchAttributes({ id: 'pid_1', lat: '1', lon: '1', variant: 'compact' }).variant, undefined);
+});
+
 test('icon keys name a species and form, and nothing else', () => {
   assert.equal(ui.iconKey({ pokemon_id: 498, form: 0 }), '498');
   assert.equal(ui.iconKey({ pokemon_id: 25, form: 1 }), '25_1');

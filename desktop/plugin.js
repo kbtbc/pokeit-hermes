@@ -2,7 +2,7 @@ import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STA
 import { useEffect, useState, useId } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.13';
+const VERSION = '0.1.14';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -32,6 +32,18 @@ export function catchAttributes(attrs) {
 // The place name is display text only; it never reaches the service.
 export function placeName(attrs) {
   return typeof attrs?.place === 'string' ? attrs.place.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80) : '';
+}
+// Only the exact word "compact" changes the card; anything else is the full card.
+export function catchVariant(attrs) { return attrs?.variant === 'compact' ? 'compact' : 'full'; }
+const mmss = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+// A walking guide: straight line at 5 km/h against the time left. Measured from the search point, not from the player.
+export function walkVerdict(meters, seconds, verified = true) {
+  if (!number(meters) || !number(seconds) || seconds <= 0) return null;
+  const walk = meters < 10 ? 0 : Math.max(1, Math.round(meters / (5000 / 60))), spare = seconds / 60 - walk;
+  const left = (verified ? '' : '~') + mmss(seconds), on = walk === 0 ? 'Right here' : `${walk} min on foot`, short = walk === 0 ? 'right here' : `${walk} min`;
+  if (spare >= 3) return { tone: 'ok', label: 'Worth the walk', detail: `${on}, ${verified ? '' : '~'}${Math.floor(spare)} min to spare`, note: `Worth it: ${short}, ${left} left` };
+  if (spare >= 0) return { tone: 'tight', label: 'Tight', detail: `${on}, ${left} left`, note: `Tight: ${short}, ${left} left` };
+  return { tone: 'far', label: 'Probably too far', detail: `${on}, only ${left} left`, note: `Too far: ${short}, ${left} left` };
 }
 export function iconKey(p) {
   if (!Number.isInteger(p?.pokemon_id) || p.pokemon_id < 1 || p.pokemon_id > 4999) return null;
@@ -377,40 +389,104 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
     w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' })
   ] });
 }
+function Pips({ c, value }) {
+  const v = number(value) ? Math.min(15, Math.max(0, Math.round(value))) : 0;
+  return h('div', { style: { flex: 1, minWidth: 90, display: 'grid', gridTemplateColumns: 'repeat(15, 1fr)', gap: 2 }, children:
+    Array.from({ length: 15 }, (_, i) => h('span', { style: { height: 8, borderRadius: 2, background: i < v ? (v === 15 ? c.accent : c.blue) : c.raised } }, i)) });
+}
 function IvBars({ c, p }) {
-  return h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 12 }, children:
-    [['Attack', p.iv_attack], ['Defense', p.iv_defense], ['Stamina', p.iv_stamina]].map(([name, v]) => hs('div', { role: 'img', 'aria-label': `${name} ${number(v) ? v : 'unknown'} of 15`, children: [
-      hs('div', { style: { ...fine(c), display: 'flex', justifyContent: 'space-between' }, children: [name, h('strong', { style: { color: c.fg }, children: number(v) ? v : '?' })] }),
-      h('div', { style: { height: 6, borderRadius: 3, background: c.raised, marginTop: 3, overflow: 'hidden' },
-        children: h('div', { style: { width: number(v) ? `${Math.min(15, Math.max(0, v)) / 15 * 100}%` : 0, height: '100%', background: v === 15 ? c.accent : c.blue } }) })
-    ] }, name)) });
+  return h('div', { style: { display: 'grid', gap: 6, marginTop: 14 }, children:
+    [['Attack', p.iv_attack], ['Defense', p.iv_defense], ['Stamina', p.iv_stamina]].map(([name, v]) => hs('div', { role: 'img', 'aria-label': `${name} ${number(v) ? v : 'unknown'} of 15`,
+      style: { display: 'flex', alignItems: 'center', gap: 10 }, children: [
+        h('span', { style: { ...fine(c), width: 56, flexShrink: 0 }, children: name }),
+        h(Pips, { c, value: v }),
+        h('strong', { style: { fontSize: 13, width: 18, textAlign: 'right' }, children: number(v) ? v : '?' })
+      ] }, name)) });
+}
+function Sparkles({ c, size }) {
+  const star = (x, y, r, opacity) => h('path', { opacity, fill: c.accent,
+    d: `M${x} ${y - r}l${r * .28} ${r * .72} ${r * .72} ${r * .28} ${-r * .72} ${r * .28} ${-r * .28} ${r * .72} ${-r * .28} ${-r * .72} ${-r * .72} ${-r * .28} ${r * .72} ${-r * .28}z` }, x + ',' + y);
+  return h('svg', { viewBox: '0 0 168 168', width: size, height: size, 'aria-hidden': true, style: { position: 'absolute', left: 0, top: 0, pointerEvents: 'none' },
+    children: [star(26, 36, 12, 1), star(146, 58, 9, .8), star(138, 146, 7, .6)] });
+}
+// Species art on a soft glow in the colour that made the catch worth a look. A letter stands in without an icon.
+function HeroArt({ ctrl, c, p, size, dim = false, sparkle = false }) {
+  useValue(ctrl.iconRev);
+  const url = ctrl.icon(p), glow = highlight(p, c)?.color || c.line;
+  return hs('div', { 'aria-hidden': true, style: { position: 'relative', width: size, height: size, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center',
+    background: dim ? 'transparent' : `radial-gradient(circle, ${glow}40 0, ${glow}00 68%)`, filter: dim ? 'grayscale(1)' : undefined, opacity: dim ? .6 : 1 }, children: [
+    url ? h('img', { alt: '', src: url, width: size - 12, height: size - 12, draggable: false, style: { display: 'block', filter: 'drop-shadow(0 6px 10px rgba(0,0,0,.4))' } })
+      : h('span', { style: { fontSize: size / 3, fontWeight: 750 }, children: url === null ? text(p?.name, 1) || '?' : '' }),
+    sparkle && !dim && h(Sparkles, { c, size })
+  ] });
+}
+function Compass({ c, d, place, timer, verified }) {
+  return hs('div', { style: { width: 150, flexShrink: 0, textAlign: 'center' }, children: [
+    d && hs('svg', { width: 112, height: 112, viewBox: '0 0 150 150', role: 'img', 'aria-label': `${amount(d.meters)} to the ${d.direction}`, style: { display: 'block', margin: '0 auto' }, children: [
+      h('circle', { cx: 75, cy: 75, r: 62, fill: 'none', stroke: c.line, strokeWidth: 1.5, strokeDasharray: '3 6' }),
+      h('text', { x: 75, y: 15, textAnchor: 'middle', fill: c.muted, fontSize: 11, children: 'N' }),
+      h('g', { transform: `rotate(${d.bearing} 75 75)`, children: h('path', { d: 'M75 20 89 72 75 63 61 72Z', fill: c.accent }) }),
+      h('circle', { cx: 75, cy: 75, r: 5, fill: c.accent })
+    ] }),
+    d && h('div', { style: { fontSize: 18, fontWeight: 700, marginTop: 4 }, children: d.meters < 10 ? 'Right here' : `${amount(d.meters)} ${d.direction}` }),
+    d && h('div', { style: fine(c), children: `of ${place || 'the search point'}` }),
+    timer.seconds > 0 ? hs('div', { style: { marginTop: 10 }, children: [
+      h('div', { style: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1, color: timer.low ? c.red : c.fg }, children: timer.label }),
+      h('div', { style: fine(c), children: verified ? 'left' : 'est. left' })
+    ] }) : h('div', { style: { ...fine(c), marginTop: 10 }, children: timer.label })
+  ] });
+}
+const TONES = c => ({ ok: c.green, tight: c.accent, far: c.red });
+const VERDICT_ICONS = { ok: 'M5 12.5l4.5 4.5L19 7.5', tight: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z', far: 'M6 6l12 12M18 6L6 18' };
+function VerdictPill({ c, verdict }) {
+  const color = TONES(c)[verdict.tone];
+  return hs('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 7, background: color + '22', border: `1px solid ${color}77`, color, borderRadius: 999, padding: '6px 13px', font: `700 13px ${font}` }, children: [
+    h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, children: h('path', { d: VERDICT_ICONS[verdict.tone] }) }),
+    verdict.label] });
 }
 function CatchSummary({ ctrl, c, p, center, sid, place, inPane = false }) {
-  const now = useValue(ctrl.clock), timer = expiry(p, now), gone = timer.expired;
+  const now = useValue(ctrl.clock), timer = expiry(p, now), gone = timer.expired, verified = p.expiry_verified === true;
   const hl = highlight(p, c), rank = rankLabel(p), d = distanceBearing(center, p);
-  return hs('div', { style: { minWidth: 0 }, children: [
-    hs('div', { style: { display: 'flex', alignItems: 'center', gap: 12 }, children: [
-      h(Mon, { ctrl, c, p, size: 64, dim: gone }),
-      hs('div', { style: { flex: 1, minWidth: 0, opacity: gone ? .65 : 1 }, children: [
-        hs('div', { style: { ...rowStyle, gap: 6 }, children: [
-          h('strong', { style: { fontSize: 16 }, children: text(p.name, 80) || 'Pokémon' }),
-          p.form_name && h('span', { style: fine(c), children: text(p.form_name, 60) }),
-          hl && h('span', { style: { font: `700 11px ${font}`, color: c.ink, background: hl.color, borderRadius: 999, padding: '2px 8px' }, children: hl.label })
-        ] }),
-        h('div', { style: { fontSize: 13 }, children: [metric(p), number(p.cp) && `CP ${p.cp}`, number(p.level) && `Lv ${p.level}`].filter(Boolean).join(' · ') }),
-        hs('div', { style: { ...fine(c), display: 'flex', alignItems: 'center', gap: 5 }, children: [
-          d && d.meters >= 10 && h(Arrow, { c, degrees: d.bearing }), distanceLabel(center, p, place)] })
+  const verdict = !gone && d ? walkVerdict(d.meters, timer.seconds, verified) : null;
+  return hs('div', { style: { ...rowStyle, gap: 22, alignItems: 'center', minWidth: 0 }, children: [
+    h(HeroArt, { ctrl, c, p, size: inPane ? 96 : 150, dim: gone, sparkle: p.iv_percent === 100 }),
+    hs('div', { style: { flex: inPane ? '1 1 150px' : '1 1 200px', minWidth: 0, opacity: gone ? .65 : 1 }, children: [
+      hs('div', { style: { ...rowStyle, gap: 10 }, children: [
+        h('strong', { style: { fontSize: inPane ? 20 : 28, lineHeight: 1.15 }, children: text(p.name, 80) || 'Pokémon' }),
+        p.form_name && h('span', { style: fine(c), children: text(p.form_name, 60) }),
+        hl && h('span', { style: { font: `700 12px ${font}`, color: c.ink, background: hl.color, borderRadius: 999, padding: '3px 11px' }, children: hl.label })
       ] }),
-      timer.seconds > 0 ? hs('div', { style: { textAlign: 'right', flexShrink: 0 }, children: [
-        h('strong', { style: { display: 'block', fontSize: 18, fontVariantNumeric: 'tabular-nums', color: timer.low ? c.red : c.fg }, children: timer.label }),
-        h('small', { style: fine(c), children: p.expiry_verified ? 'left' : 'est. left' })
-      ] }) : h('span', { style: { ...fine(c), flexShrink: 0 }, children: timer.label })
+      h('div', { style: { fontSize: 14, marginTop: 3 }, children: [metric(p), number(p.cp) && `CP ${p.cp}`, number(p.level) && `Lv ${p.level}`].filter(Boolean).join(' · ') }),
+      inPane && hs('div', { style: { ...fine(c), display: 'flex', alignItems: 'center', gap: 5 }, children: [
+        d && d.meters >= 10 && h(Arrow, { c, degrees: d.bearing }), distanceLabel(center, p, place), timer.seconds > 0 && ` · ${timer.label} left`] }),
+      verdict && hs('div', { style: { ...rowStyle, gap: 10, marginTop: 12 }, children: [
+        h(VerdictPill, { c, verdict }), h('span', { style: fine(c), children: verdict.detail })] }),
+      !gone && h(IvBars, { c, p }),
+      !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 8 }, children: rank }),
+      !gone && hs('div', { style: { ...rowStyle, marginTop: 14 }, children: [
+        h(Button, { c, primary: true, style: { padding: '10px 16px', fontSize: 13 }, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
+        !inPane && h(Button, { c, style: { padding: '10px 16px', fontSize: 13 }, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show in Radar' })
+      ] })
     ] }),
-    !gone && h(IvBars, { c, p }),
-    !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 8 }, children: rank }),
-    !gone && hs('div', { style: { ...rowStyle, marginTop: 12 }, children: [
-      h(Button, { c, primary: true, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
-      !inPane && h(Button, { c, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show in Radar' })
+    !inPane && h(Compass, { c, d, place, timer, verified })
+  ] });
+}
+// The runner-up row: one line per catch, art, the numbers that matter and whether it is worth the walk.
+function CompactCatch({ ctrl, c, p, center, sid, place }) {
+  const now = useValue(ctrl.clock), timer = expiry(p, now), gone = timer.expired, verified = p.expiry_verified === true;
+  const d = distanceBearing(center, p), verdict = !gone && d ? walkVerdict(d.meters, timer.seconds, verified) : null;
+  return hs('div', { style: { display: 'flex', alignItems: 'center', gap: 12, opacity: gone ? .65 : 1 }, children: [
+    h(Mon, { ctrl, c, p, size: 58, dim: gone }),
+    hs('div', { style: { flex: 1, minWidth: 0 }, children: [
+      h('strong', { style: { fontSize: 14 }, children: text(p.name, 80) || 'Pokémon' }),
+      h('div', { style: fine(c), children: [metric(p), d && `${amount(d.meters)} ${d.direction}`].filter(Boolean).join(' · ') }),
+      gone ? h('div', { style: fine(c), children: timer.label })
+        : verdict ? h('div', { style: { fontSize: 12, fontWeight: 650, color: TONES(c)[verdict.tone] }, children: verdict.note })
+        : h('div', { style: fine(c), children: timer.seconds > 0 ? `${timer.label} left` : timer.label })
+    ] }),
+    !gone && hs('div', { style: { ...rowStyle, flexShrink: 0, gap: 6 }, children: [
+      h(Button, { c, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Map ↗' }),
+      h(Button, { c, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Radar' })
     ] })
   ] });
 }
@@ -555,8 +631,8 @@ function Skeleton({ c, label }) {
   ] });
 }
 function CatchCard({ ctrl, attrs, sid, streaming }) {
-  const c = useColors(), args = catchAttributes(attrs), place = placeName(attrs), key = args ? JSON.stringify(args) : '';
-  const [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
+  const c = useColors(), args = catchAttributes(attrs), place = placeName(attrs), compact = catchVariant(attrs) === 'compact', key = args ? JSON.stringify(args) : '';
+  const now = useValue(ctrl.clock), [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!key || streaming) return;
     const targetSid = sid || activeSession();
@@ -571,12 +647,14 @@ function CatchCard({ ctrl, attrs, sid, streaming }) {
   // A catch that is gone needs a line, not a box.
   if (data && data.status !== 'observed') return h('p', { role: 'status', style: { ...fine(c), margin: '8px 0' },
     children: data.status === 'expired' ? 'This catch has expired.' : data.truncated ? 'This catch is not in the latest limited read. It may still be around.' : 'This catch is no longer in the latest read. It may have expired.' });
-  const hl = data?.observation && highlight(data.observation, c);
-  return hs('article', { 'aria-label': 'PokeIt catch', style: { ...panel(c), maxWidth: 560, margin: '8px 0', borderLeft: `4px solid ${hl ? hl.color : c.line}` }, children: [
+  // A catch that expires while the card is on screen folds down to the quiet row.
+  const p = data?.observation, row = compact || (p && expiry(p, now).expired), hl = p && highlight(p, c);
+  return hs('article', { 'aria-label': 'PokeIt catch', style: { ...panel(c), maxWidth: row ? 640 : 780, margin: '8px 0', padding: row ? 12 : 22,
+    background: hl && !row ? `radial-gradient(circle at 105px 100px, ${hl.color}33 0, ${hl.color}00 250px), ${c.surface}` : c.surface }, children: [
     h(Styles, {}),
     !data && !error && h(Skeleton, { c, label: streaming ? 'Preparing catch card' : 'Checking this catch' }),
     error && hs('div', { children: [h(ErrorNote, { c, message: error }), h(Button, { c, onClick: () => setRetry(v => v + 1), children: 'Try again' })] }),
-    data?.observation && h(CatchSummary, { ctrl, c, p: data.observation, center: data.origin, sid, place }),
+    p && h(row ? CompactCatch : CatchSummary, { ctrl, c, p, center: data.origin, sid, place }),
     data?.truncated && h('small', { style: fine(c), children: 'The source returned a limited sample.' })
   ] });
 }
@@ -601,34 +679,32 @@ function ScanCard({ ctrl, attrs, streaming }) {
   const created = number(data?.created_at) ? new Date(data.created_at * 1000) : null;
   const requested = created && !Number.isNaN(created.getTime()) ? created.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   const elapsed = created ? Math.max(0, Math.floor(now / 1000 - data.created_at)) : null;
-  const meta = p.terminal ? (requested ? `Requested at ${requested}` : '') : elapsed !== null ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')} elapsed` : '';
+  const meta = p.terminal ? (requested ? `Requested at ${requested}` : '') : elapsed !== null ? `${mmss(elapsed)} elapsed` : '';
   const tone = status === 'failed' ? c.red : p.terminal ? (status === 'partial_unverified' ? c.accent : c.green) : c.accent;
-  const next = !p.terminal && p.total ? p.done : -1;
-  return hs('article', { 'aria-label': 'PokeIt scan progress', style: { ...panel(c), maxWidth: 560, margin: '8px 0' }, children: [
+  const done = p.terminal && (status === 'data_refreshed' || status === 'existing_coverage');
+  const detail = [p.total ? `${p.done} of ${p.total} points confirmed or covered` : 'Waiting for point counts', meta,
+    p.unverified > 0 && `${p.unverified} unverified`, p.failed > 0 && `${p.failed} failed`].filter(Boolean).join(' · ');
+  return hs('article', { 'aria-label': 'PokeIt scan progress', style: { ...panel(c), maxWidth: 780, margin: '8px 0', padding: '14px 18px' }, children: [
     h(Styles, {}),
-    hs('div', { style: { display: 'flex', alignItems: 'center', gap: 8 }, children: [
-      h('span', { 'aria-hidden': true, className: p.terminal ? undefined : 'pokeit-pulse', style: { width: 9, height: 9, borderRadius: '50%', background: tone, flexShrink: 0 } }),
-      h('strong', { style: { fontSize: 15 }, children: labels[status] || 'Checking scan status…' })
+    hs('div', { style: { display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }, children: [
+      hs('svg', { width: 56, height: 56, viewBox: '0 0 56 56', role: 'img', 'aria-label': p.total ? `${p.done} of ${p.total} points confirmed or covered` : 'Waiting for point counts', style: { flexShrink: 0 }, children: [
+        h('circle', { cx: 28, cy: 28, r: 23, fill: 'none', stroke: c.raised, strokeWidth: 6 }),
+        h('circle', { cx: 28, cy: 28, r: 23, fill: 'none', stroke: tone, strokeWidth: 6, strokeLinecap: 'round', transform: 'rotate(-90 28 28)',
+          strokeDasharray: `${(p.total ? p.done / p.total : 0) * 144.5} 144.5`, style: { transition: 'stroke-dasharray .6s ease' } }),
+        done ? h('path', { d: 'M19 28.5l6 6 12-12', fill: 'none', stroke: tone, strokeWidth: 3.5, strokeLinecap: 'round', strokeLinejoin: 'round' })
+          : h('text', { x: 28, y: 32, textAnchor: 'middle', fill: c.fg, fontSize: 12, fontWeight: 700, children: status === 'failed' ? '!' : number(p.done) ? String(p.done) : '–' })
+      ] }),
+      hs('div', { style: { flex: '1 1 220px', minWidth: 0 }, children: [
+        hs('div', { style: { display: 'flex', alignItems: 'center', gap: 8 }, children: [
+          h('span', { 'aria-hidden': true, className: p.terminal ? undefined : 'pokeit-pulse', style: { width: 9, height: 9, borderRadius: '50%', background: tone, flexShrink: 0 } }),
+          h('strong', { style: { fontSize: 15 }, children: labels[status] || 'Checking scan status…' })
+        ] }),
+        h('div', { style: { ...fine(c), marginTop: 2 }, children: detail })
+      ] }),
+      data?.map_url && h(Button, { c, onClick: () => openMap(ctrl.ctx, data.map_url), children: 'Open live map ↗' })
     ] }),
-    hs('div', { style: { display: 'flex', gap: 16, alignItems: 'center', marginTop: 10 }, children: [
-      hs('svg', { viewBox: '0 0 180 154', role: 'img', 'aria-label': p.total ? `${p.done} of ${p.total} points confirmed or covered` : 'Waiting for point counts',
-        style: { width: 180, flexShrink: 1 }, children: Array.from({ length: Math.min(p.total || 49, 100) }, (_, i) => {
-          const x = 24 + (i % 7) * 21 + (Math.floor(i / 7) % 2) * 10, y = 14 + Math.floor(i / 7) * 21;
-          const color = p.total && i < p.done ? c.green : p.total && i >= p.total - p.failed ? c.red : p.total && i >= p.total - p.failed - p.unverified ? c.accent : c.line;
-          return h('circle', { cx: x, cy: y, r: 6.5, fill: color, className: i === next ? 'pokeit-pulse' : undefined, style: { transition: 'fill .5s ease' } }, i);
-        }) }),
-      hs('div', { children: [
-        h('div', { style: { fontSize: 27, fontWeight: 750, fontVariantNumeric: 'tabular-nums' }, children: p.total ? `${p.done}/${p.total}` : '—' }),
-        h('div', { style: fine(c), children: 'points confirmed or covered' }),
-        meta && h('div', { style: fine(c), children: meta }),
-        p.unverified > 0 && h('div', { style: { ...fine(c), color: c.accent }, children: `${p.unverified} unverified` }),
-        p.failed > 0 && h('div', { style: { ...fine(c), color: c.red }, children: `${p.failed} failed` })
-      ] })
-    ] }),
-    h('small', { style: fine(c), children: 'Dots show aggregate counts, not the locations of individual scouts.' }),
     h(ErrorNote, { c, message: error }),
-    error && h(Button, { c, onClick: () => setRetry(v => v + 1), children: 'Retry status' }),
-    data?.map_url && h(Button, { c, style: { marginTop: 10 }, onClick: () => openMap(ctrl.ctx, data.map_url), children: 'Open live map ↗' })
+    error && h(Button, { c, onClick: () => setRetry(v => v + 1), children: 'Retry status' })
   ] });
 }
 function StatusChip({ ctrl }) {

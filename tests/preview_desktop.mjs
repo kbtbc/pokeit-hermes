@@ -40,7 +40,9 @@ const ICONS=${JSON.stringify(icons)}, wide=location.search.includes('wide');
 const center={lat:34.074612345678901,lon:-84.29221234567890}, now=Date.now(), at=m=>new Date(now+m*60000).toISOString();
 const directive=attrs=>segmentTranscriptDirectives('::pokeit-catch{'+attrs+'}')[0].directive;
 const origin='origin_lat="34.074612345678901" origin_lon="-84.29221234567890" place="Alpharetta City Hall"';
-const cards=[directive('id="pid_fixture_a" lat="34.076000" lon="-84.290000" '+origin),directive('id="pid_fixture_c" lat="34.0714" lon="-84.2893" '+origin),
+const cards=[directive('id="pid_fixture_a" lat="34.076000" lon="-84.290000" '+origin),
+  directive('id="pid_fixture_c" lat="34.0714" lon="-84.2893" variant="compact" '+origin),directive('id="pid_fixture_d" lat="34.0725" lon="-84.2952" variant="compact" '+origin),
+  directive('id="pid_fixture_b" lat="34.0733" lon="-84.2931" variant="compact" '+origin),
   directive('id="pid_fixture_late" lat="34.0714" lon="-84.2893" '+origin),directive('id="pid_fixture_gone" lat="34.07" lon="-84.29" '+origin),directive('id="pid_fixture_expired" lat="34.07" lon="-84.29" '+origin)];
 const catches=[{observation_id:'pid_fixture_a',pokemon_id:147,form:0,name:'Dratini',lat:34.076,lon:-84.290,iv_percent:100,iv_attack:15,iv_defense:15,iv_stamina:15,cp:391,level:20,expires_at:at(14),expiry_verified:true,map_url:'https://pokeit.cc/pokemon/pid_fixture_a'},
 {observation_id:'pid_fixture_b',pokemon_id:198,form:0,name:'Murkrow',lat:34.0733,lon:-84.2931,iv_percent:73.3,iv_attack:0,iv_defense:15,iv_stamina:15,cp:711,level:22,expires_at:at(1.4),expiry_verified:false,map_url:'https://pokeit.cc/pokemon/pid_fixture_b',pvp_iv_rankings:{ultra:[{rank:1,ranked_species_name:'Honchkrow',same_species_as_observation:false}]}},
@@ -96,6 +98,10 @@ try {
   assert.equal(await page.getByText('Distance unknown',{exact:true}).count(),0);
   assert.ok(await page.getByText('of Alpharetta City Hall').count()>=2);
   assert.equal(await page.getByText('search point',{exact:true}).count(),0);
+  assert.equal(await page.getByText('Worth the walk',{exact:true}).count(),1);
+  assert.ok(await page.getByText(/min on foot/).count()>=1);
+  assert.equal(await page.getByText(/^Worth it: 5 min/).count(),1);
+  assert.equal(await page.getByText(/^Too far: 2 min, ~1:/).count(),1);
   assert.equal(await page.getByText('This catch has expired.',{exact:true}).count(),1);
   assert.equal(await page.getByText(/no longer in the latest read/).count(),1);
   if (iconDir) { await page.waitForFunction(()=>document.querySelectorAll('article img').length>=2); }
