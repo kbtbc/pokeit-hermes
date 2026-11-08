@@ -35,6 +35,13 @@ Hermes calls the hosted PokeIt MCP server, which answers from observations on th
 
 Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart.
 
+## Why a plugin, not just a skill
+
+- **It acts, with your approval.** When the map has no data, the agent can ask PokeIt to scan the area. That is a write-capable tool, so Hermes asks before it runs. Nothing else in the plugin can start one.
+- **It brings a live service.** Answers come from a scanning network behind `mcp.pokeit.cc`, not from the model's memory or a web search.
+- **It has a Desktop half.** A radar pane, catch cards with art and a walking guide, and Hunt Watch alerts, built on the Desktop SDK and a small read-only proxy.
+- **It works without Desktop.** On the CLI and in chat apps you get the same tools and answers, with plain map links.
+
 ## Hermes Desktop
 
 On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`. Then open **PokeIt Radar** from the status bar. Pick a spot to see its catches on a radar and in a list, or use **Show in Radar** on a chat card. Ask for "PokeIt cards", or press **Best catches** in the Radar, to get catch cards in the chat. Catch cards show the species art, IVs, a compass to the catch, a live countdown and a walking guide, a straight line at 5 km/h from the place you searched rather than from you. Scan cards fill a progress ring as points are confirmed. New scans still use the agent's approval prompt.
