@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "pokeit",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Live Pokémon GO catches, raids, showcases and events from PokeIt, with fresh scans on request. No sign-in or API key.",
   "author": {"name": "PokeIt"},
   "homepage": "https://pokeit.cc",

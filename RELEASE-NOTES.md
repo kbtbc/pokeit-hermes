@@ -1,5 +1,11 @@
 # PokeIt release notes
 
+## 0.1.15 · November 8, 2026 · 7:10 AM ET (EST, UTC-05:00)
+
+- Worldwide place lookup through self-hosted Photon, with limited US fallback. Confirm a new place and city before scanning; follow-ups reuse the confirmed spot.
+- Clearer guidance for estimated despawn times. An estimated expiry is not a learned spawnpoint timer or a guarantee.
+- Preserves the v0.1.14 Desktop card and radar design.
+
 ## 0.1.14 · November 7, 2026 · 10:45 PM ET (EST, UTC-05:00)
 
 - The chat cards are now a trainer briefing. The top pick is a hero card with large art and a glow, sparkles on a hundo, a compass to the catch, segmented IV bars, a countdown and a walking guide ("Worth the walk", "Tight" or "Probably too far"). The guide is a straight line at 5 km/h from the place you searched, not from you.
