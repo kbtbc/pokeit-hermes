@@ -49,7 +49,7 @@ The Desktop installer adds the interface locally and the backend to your selecte
 | `find_raids` `find_gyms` `find_showcases` `find_max_battles` `find_pokestops` | What is active near a point: raids and eggs, gym slots, showcases, Max Battles, lures and Rocket stops |
 | `get_game_context` `get_event_details` | Official event articles that matter for what is nearby |
 | `get_coverage` `request_scan` `get_scan_status` | Check coverage, start an approved scan, follow its progress |
-| `search_places` `describe_location` `list_areas` | Place name to coordinates and back (worldwide; confirm the matched place and city), and the listed map areas |
+| `search_places` `describe_location` `list_areas` | Place name to coordinates and back (worldwide; clear matches proceed, ambiguous places need clarification), and the listed map areas |
 | `get_map_preview` | A map screenshot with a live link |
 
 ## What leaves your machine
