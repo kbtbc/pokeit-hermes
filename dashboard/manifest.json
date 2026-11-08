@@ -1,0 +1,9 @@
+{
+  "name": "pokeit",
+  "label": "PokeIt",
+  "description": "Read-only backend for PokeIt Radar in Hermes Desktop.",
+  "icon": "Globe",
+  "tab": {"path": "/pokeit", "hidden": true},
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}

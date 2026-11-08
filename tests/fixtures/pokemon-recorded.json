@@ -1,0 +1,333 @@
+{
+ "jsonrpc": "2.0",
+ "id": 1,
+ "result": {
+  "content": [
+   {
+    "text": "{\"source\":\"live_public_map\",\"queried_at\":\"2026-11-06T05:06:04.238074+00:00\",\"location\":{\"lat\":34.07463485,\"lon\":-84.29227051},\"radius_m\":500,\"observations\":[{\"observation_id\":\"pid_ck4NsqxcOo5b-HXNG3AmYVLzEqE48ebI\",\"pokemon_id\":506,\"name\":\"Lillipup\",\"form\":0,\"lat\":34.074399,\"lon\":-84.292186,\"distance_m\":27,\"iv_percent\":46.67,\"cp\":223,\"level\":10,\"iv_attack\":2,\"iv_defense\":12,\"iv_stamina\":7,\"highlight\":null,\"pvp_iv_rankings\":{\"little\":[{\"pokemon_id\":506,\"form\":0,\"rank\":793,\"cap\":50,\"cp\":492,\"level\":22,\"percentage\":0.95175,\"ranked_species_name\":\"Lillipup\",\"same_species_as_observation\":true},{\"pokemon_id\":507,\"form\":0,\"rank\":2169,\"cap\":50,\"cp\":482,\"level\":12,\"percentage\":0.92808,\"ranked_species_name\":\"Herdier\",\"same_species_as_observation\":false}],\"great\":[{\"pokemon_id\":507,\"form\":0,\"rank\":392,\"cap\":50,\"cp\":1496,\"level\":45,\"percentage\":0.97474,\"ranked_species_name\":\"Herdier\",\"same_species_as_observation\":false},{\"pokemon_id\":508,\"form\":0,\"rank\":753,\"cap\":50,\"cp\":1480,\"level\":20,\"percentage\":0.96277,\"ranked_species_name\":\"Stoutland\",\"same_species_as_observation\":false}],\"ultra\":[{\"pokemon_id\":508,\"form\":0,\"rank\":151,\"cap\":50,\"cp\":2498,\"level\":37.5,\"percentage\":0.9835,\"ranked_species_name\":\"Stoutland\",\"same_species_as_observation\":false}]},\"pvp_rank_meaning\":\"IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate\",\"position_source\":\"encounter\",\"record_updated_at\":\"2026-11-06T04:52:44+00:00\",\"record_age_seconds\":800,\"expires_at\":\"2026-11-06T05:21:45+00:00\",\"expiry_verified\":true,\"map_url\":\"https://pokeit.cc/?lat=34.074399&lon=-84.292186&zoom=16\"},{\"observation_id\":\"pid_-S5G7d1JgLsbKJC5-8CHDUh3qMau6Krv\",\"pokemon_id\":74,\"name\":\"Geodude\",\"form\":68,\"lat\":34.074478,\"lon\":-84.292022,\"distance_m\":29,\"iv_percent\":42.22,\"cp\":425,\"level\":13,\"iv_attack\":7,\"iv_defense\":0,\"iv_stamina\":12,\"highlight\":null,\"pvp_iv_rankings\":{\"little\":[{\"pokemon_id\":74,\"form\":68,\"rank\":2374,\"cap\":50,\"cp\":491,\"level\":15,\"percentage\":0.92487,\"ranked_species_name\":\"Geodude\",\"same_species_as_observation\":true}],\"great\":[{\"pokemon_id\":75,\"form\":70,\"rank\":1799,\"cap\":50,\"cp\":1498,\"level\":31,\"percentage\":0.95219,\"ranked_species_name\":\"Graveler\",\"same_species_as_observation\":false},{\"pokemon_id\":76,\"form\":72,\"rank\":2655,\"cap\":50,\"cp\":1478,\"level\":19,\"percentage\":0.94425,\"ranked_species_name\":\"Golem\",\"same_species_as_observation\":false}],\"ultra\":[{\"pokemon_id\":76,\"form\":72,\"rank\":2486,\"cap\":50,\"cp\":2489,\"level\":34,\"percentage\":0.9554,\"ranked_species_name\":\"Golem\",\"same_species_as_observation\":false}]},\"pvp_rank_meaning\":\"IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate\",\"position_source\":\"encounter\",\"record_updated_at\":\"2026-11-06T04:47:40+00:00\",\"record_age_seconds\":1104,\"expires_at\":\"2026-11-06T05:14:21+00:00\",\"expiry_verified\":true,\"map_url\":\"https://pokeit.cc/?lat=34.074478&lon=-84.292022&zoom=16\"},{\"observation_id\":\"pid_2NaVoFFfBsNx1gk-piViYTIlAGIoPw_Z\",\"pokemon_id\":682,\"name\":\"Spritzee\",\"form\":0,\"lat\":34.074414,\"lon\":-84.292515,\"distance_m\":33,\"iv_percent\":46.67,\"cp\":718,\"level\":23,\"iv_attack\":5,\"iv_defense\":4,\"iv_stamina\":12,\"highlight\":null,\"pvp_iv_rankings\":{\"great\":[{\"pokemon_id\":683,\"form\":0,\"rank\":1142,\"cap\":50,\"cp\":1489,\"level\":24.5,\"percentage\":0.95986,\"ranked_species_name\":\"Aromatisse\",\"same_species_as_observation\":false}],\"ultra\":[{\"pokemon_id\":683,\"form\":0,\"rank\":2686,\"cap\":50,\"cp\":2406,\"level\":50,\"percentage\":0.92437,\"ranked_species_name\":\"Aromatisse\",\"same_species_as_observation\":false}]},\"pvp_rank_meaning\":\"IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate\",\"position_source\":\"encounter\",\"record_updated_at\":\"2026-11-06T05:02:54+00:00\",\"record_age_seconds\":190,\"expires_at\":\"2026-11-06T05:30:14+00:00\",\"expiry_verified\":true,\"map_url\":\"https://pokeit.cc/?lat=34.074414&lon=-84.292515&zoom=16\"},{\"observation_id\":\"pid_Ai1HwqpMq0v-rE9gEwHHzEcdGmBDXEgt\",\"pokemon_id\":587,\"name\":\"Emolga\",\"form\":0,\"lat\":34.074927,\"lon\":-84.292351,\"distance_m\":33,\"iv_percent\":60,\"cp\":772,\"level\":18,\"iv_attack\":6,\"iv_defense\":9,\"iv_stamina\":12,\"highlight\":null,\"pvp_iv_rankings\":{\"great\":[{\"pokemon_id\":587,\"form\":0,\"rank\":1236,\"cap\":50,\"cp\":1490,\"level\":39.5,\"percentage\":0.95768,\"ranked_species_name\":\"Emolga\",\"same_species_as_observation\":true}]},\"pvp_rank_meaning\":\"IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate\",\"position_source\":\"encounter\",\"record_updated_at\":\"2026-11-06T04:37:34+00:00\",\"record_age_seconds\":1710,\"expires_at\":\"2026-11-06T05:06:10+00:00\",\"expiry_verified\":true,\"map_url\":\"https://pokeit.cc/?lat=34.074927&lon=-84.292351&zoom=16\"},{\"observation_id\":\"pid_DkGRDOvN3EHYprG0eTioFrwHyCagPT6Q\",\"pokemon_id\":587,\"name\":\"Emolga\",\"form\":0,\"lat\":34.074391,\"lon\":-84.292022,\"distance_m\":35,\"iv_percent\":68.89,\"cp\":116,\"level\":3,\"iv_attack\":15,\"iv_defense\":15,\"iv_stamina\":1,\"highlight\":null,\"pvp_iv_rankings\":{\"little\":[{\"pokemon_id\":587,\"form\":0,\"rank\":2792,\"cap\":50,\"cp\":490,\"level\":11,\"percentage\":0.91892,\"ranked_species_name\":\"Emolga\",\"same_species_as_observation\":true}],\"great\":[{\"pokemon_id\":587,\"form\":0,\"rank\":3620,\"cap\":50,\"cp\":1494,\"level\":37,\"percentage\":0.92667,\"ranked_species_name\":\"Emolga\",\"same_species_as_observation\":true}]},\"pvp_rank_meaning\":\"IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate\",\"position_source\":\"encounter\",\"record_updated_at\":\"2026-11-06T05:02:53+00:00\",\"record_age_seconds\":191,\"expires_at\":\"2026-11-06T05:58:22+00:00\",\"expiry_verified\":true,\"map_url\":\"https://pokeit.cc/?lat=34.074391&lon=-84.292022&zoom=16\"}],\"returned\":5,\"selection\":\"all_matching\",\"observed_candidates_in_radius\":276,\"truncated\":true,\"exhaustive\":false,\"scan_started\":false,\"map_url\":\"https://pokeit.cc/?lat=34.074635&lon=-84.292271&zoom=16\",\"note\":\"Existing observations; observed_candidates_in_radius counts unexpired candidates before species/IV/rank filters, not an exhaustive census. Zero returned means no matching catches, not no map observations or no Pokemon. Configured-area membership does not decide whether observations exist.\"}",
+    "type": "text"
+   }
+  ],
+  "isError": false,
+  "structuredContent": {
+   "source": "live_public_map",
+   "queried_at": "2026-11-06T05:06:04.238074+00:00",
+   "location": {
+    "lat": 34.07463485,
+    "lon": -84.29227051
+   },
+   "radius_m": 500,
+   "observations": [
+    {
+     "observation_id": "pid_ck4NsqxcOo5b-HXNG3AmYVLzEqE48ebI",
+     "pokemon_id": 506,
+     "name": "Lillipup",
+     "form": 0,
+     "lat": 34.074399,
+     "lon": -84.292186,
+     "distance_m": 27,
+     "iv_percent": 46.67,
+     "cp": 223,
+     "level": 10,
+     "iv_attack": 2,
+     "iv_defense": 12,
+     "iv_stamina": 7,
+     "highlight": null,
+     "pvp_iv_rankings": {
+      "little": [
+       {
+        "pokemon_id": 506,
+        "form": 0,
+        "rank": 793,
+        "cap": 50,
+        "cp": 492,
+        "level": 22,
+        "percentage": 0.95175,
+        "ranked_species_name": "Lillipup",
+        "same_species_as_observation": true
+       },
+       {
+        "pokemon_id": 507,
+        "form": 0,
+        "rank": 2169,
+        "cap": 50,
+        "cp": 482,
+        "level": 12,
+        "percentage": 0.92808,
+        "ranked_species_name": "Herdier",
+        "same_species_as_observation": false
+       }
+      ],
+      "great": [
+       {
+        "pokemon_id": 507,
+        "form": 0,
+        "rank": 392,
+        "cap": 50,
+        "cp": 1496,
+        "level": 45,
+        "percentage": 0.97474,
+        "ranked_species_name": "Herdier",
+        "same_species_as_observation": false
+       },
+       {
+        "pokemon_id": 508,
+        "form": 0,
+        "rank": 753,
+        "cap": 50,
+        "cp": 1480,
+        "level": 20,
+        "percentage": 0.96277,
+        "ranked_species_name": "Stoutland",
+        "same_species_as_observation": false
+       }
+      ],
+      "ultra": [
+       {
+        "pokemon_id": 508,
+        "form": 0,
+        "rank": 151,
+        "cap": 50,
+        "cp": 2498,
+        "level": 37.5,
+        "percentage": 0.9835,
+        "ranked_species_name": "Stoutland",
+        "same_species_as_observation": false
+       }
+      ]
+     },
+     "pvp_rank_meaning": "IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate",
+     "position_source": "encounter",
+     "record_updated_at": "2026-11-06T04:52:44+00:00",
+     "record_age_seconds": 800,
+     "expires_at": "2026-11-06T05:21:45+00:00",
+     "expiry_verified": true,
+     "map_url": "https://pokeit.cc/?lat=34.074399&lon=-84.292186&zoom=16"
+    },
+    {
+     "observation_id": "pid_-S5G7d1JgLsbKJC5-8CHDUh3qMau6Krv",
+     "pokemon_id": 74,
+     "name": "Geodude",
+     "form": 68,
+     "lat": 34.074478,
+     "lon": -84.292022,
+     "distance_m": 29,
+     "iv_percent": 42.22,
+     "cp": 425,
+     "level": 13,
+     "iv_attack": 7,
+     "iv_defense": 0,
+     "iv_stamina": 12,
+     "highlight": null,
+     "pvp_iv_rankings": {
+      "little": [
+       {
+        "pokemon_id": 74,
+        "form": 68,
+        "rank": 2374,
+        "cap": 50,
+        "cp": 491,
+        "level": 15,
+        "percentage": 0.92487,
+        "ranked_species_name": "Geodude",
+        "same_species_as_observation": true
+       }
+      ],
+      "great": [
+       {
+        "pokemon_id": 75,
+        "form": 70,
+        "rank": 1799,
+        "cap": 50,
+        "cp": 1498,
+        "level": 31,
+        "percentage": 0.95219,
+        "ranked_species_name": "Graveler",
+        "same_species_as_observation": false
+       },
+       {
+        "pokemon_id": 76,
+        "form": 72,
+        "rank": 2655,
+        "cap": 50,
+        "cp": 1478,
+        "level": 19,
+        "percentage": 0.94425,
+        "ranked_species_name": "Golem",
+        "same_species_as_observation": false
+       }
+      ],
+      "ultra": [
+       {
+        "pokemon_id": 76,
+        "form": 72,
+        "rank": 2486,
+        "cap": 50,
+        "cp": 2489,
+        "level": 34,
+        "percentage": 0.9554,
+        "ranked_species_name": "Golem",
+        "same_species_as_observation": false
+       }
+      ]
+     },
+     "pvp_rank_meaning": "IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate",
+     "position_source": "encounter",
+     "record_updated_at": "2026-11-06T04:47:40+00:00",
+     "record_age_seconds": 1104,
+     "expires_at": "2026-11-06T05:14:21+00:00",
+     "expiry_verified": true,
+     "map_url": "https://pokeit.cc/?lat=34.074478&lon=-84.292022&zoom=16"
+    },
+    {
+     "observation_id": "pid_2NaVoFFfBsNx1gk-piViYTIlAGIoPw_Z",
+     "pokemon_id": 682,
+     "name": "Spritzee",
+     "form": 0,
+     "lat": 34.074414,
+     "lon": -84.292515,
+     "distance_m": 33,
+     "iv_percent": 46.67,
+     "cp": 718,
+     "level": 23,
+     "iv_attack": 5,
+     "iv_defense": 4,
+     "iv_stamina": 12,
+     "highlight": null,
+     "pvp_iv_rankings": {
+      "great": [
+       {
+        "pokemon_id": 683,
+        "form": 0,
+        "rank": 1142,
+        "cap": 50,
+        "cp": 1489,
+        "level": 24.5,
+        "percentage": 0.95986,
+        "ranked_species_name": "Aromatisse",
+        "same_species_as_observation": false
+       }
+      ],
+      "ultra": [
+       {
+        "pokemon_id": 683,
+        "form": 0,
+        "rank": 2686,
+        "cap": 50,
+        "cp": 2406,
+        "level": 50,
+        "percentage": 0.92437,
+        "ranked_species_name": "Aromatisse",
+        "same_species_as_observation": false
+       }
+      ]
+     },
+     "pvp_rank_meaning": "IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate",
+     "position_source": "encounter",
+     "record_updated_at": "2026-11-06T05:02:54+00:00",
+     "record_age_seconds": 190,
+     "expires_at": "2026-11-06T05:30:14+00:00",
+     "expiry_verified": true,
+     "map_url": "https://pokeit.cc/?lat=34.074414&lon=-84.292515&zoom=16"
+    },
+    {
+     "observation_id": "pid_Ai1HwqpMq0v-rE9gEwHHzEcdGmBDXEgt",
+     "pokemon_id": 587,
+     "name": "Emolga",
+     "form": 0,
+     "lat": 34.074927,
+     "lon": -84.292351,
+     "distance_m": 33,
+     "iv_percent": 60,
+     "cp": 772,
+     "level": 18,
+     "iv_attack": 6,
+     "iv_defense": 9,
+     "iv_stamina": 12,
+     "highlight": null,
+     "pvp_iv_rankings": {
+      "great": [
+       {
+        "pokemon_id": 587,
+        "form": 0,
+        "rank": 1236,
+        "cap": 50,
+        "cp": 1490,
+        "level": 39.5,
+        "percentage": 0.95768,
+        "ranked_species_name": "Emolga",
+        "same_species_as_observation": true
+       }
+      ]
+     },
+     "pvp_rank_meaning": "IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate",
+     "position_source": "encounter",
+     "record_updated_at": "2026-11-06T04:37:34+00:00",
+     "record_age_seconds": 1710,
+     "expires_at": "2026-11-06T05:06:10+00:00",
+     "expiry_verified": true,
+     "map_url": "https://pokeit.cc/?lat=34.074927&lon=-84.292351&zoom=16"
+    },
+    {
+     "observation_id": "pid_DkGRDOvN3EHYprG0eTioFrwHyCagPT6Q",
+     "pokemon_id": 587,
+     "name": "Emolga",
+     "form": 0,
+     "lat": 34.074391,
+     "lon": -84.292022,
+     "distance_m": 35,
+     "iv_percent": 68.89,
+     "cp": 116,
+     "level": 3,
+     "iv_attack": 15,
+     "iv_defense": 15,
+     "iv_stamina": 1,
+     "highlight": null,
+     "pvp_iv_rankings": {
+      "little": [
+       {
+        "pokemon_id": 587,
+        "form": 0,
+        "rank": 2792,
+        "cap": 50,
+        "cp": 490,
+        "level": 11,
+        "percentage": 0.91892,
+        "ranked_species_name": "Emolga",
+        "same_species_as_observation": true
+       }
+      ],
+      "great": [
+       {
+        "pokemon_id": 587,
+        "form": 0,
+        "rank": 3620,
+        "cap": 50,
+        "cp": 1494,
+        "level": 37,
+        "percentage": 0.92667,
+        "ranked_species_name": "Emolga",
+        "same_species_as_observation": true
+       }
+      ]
+     },
+     "pvp_rank_meaning": "IV rank for the named league/species/form and upstream cap; not species meta rank or predicted win rate",
+     "position_source": "encounter",
+     "record_updated_at": "2026-11-06T05:02:53+00:00",
+     "record_age_seconds": 191,
+     "expires_at": "2026-11-06T05:58:22+00:00",
+     "expiry_verified": true,
+     "map_url": "https://pokeit.cc/?lat=34.074391&lon=-84.292022&zoom=16"
+    }
+   ],
+   "returned": 5,
+   "selection": "all_matching",
+   "observed_candidates_in_radius": 276,
+   "truncated": true,
+   "exhaustive": false,
+   "scan_started": false,
+   "map_url": "https://pokeit.cc/?lat=34.074635&lon=-84.292271&zoom=16",
+   "note": "Existing observations; observed_candidates_in_radius counts unexpired candidates before species/IV/rank filters, not an exhaustive census. Zero returned means no matching catches, not no map observations or no Pokemon. Configured-area membership does not decide whether observations exist."
+  }
+ }
+}

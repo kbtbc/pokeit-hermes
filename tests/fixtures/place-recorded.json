@@ -1,0 +1,38 @@
+{
+ "jsonrpc": "2.0",
+ "id": 1,
+ "result": {
+  "content": [
+   {
+    "text": "{\"query\":\"Alpharetta City Hall\",\"places\":[{\"label\":\"Alpharetta City Hall, 2, Park Plaza, Alpharetta, Fulton County, Georgia, 30009, United States\",\"lat\":34.07463485,\"lon\":-84.29227051021945,\"type\":\"townhall\",\"country_code\":\"us\",\"bounding_box\":[\"34.0744135\",\"34.0748485\",\"-84.2924641\",\"-84.2920769\"],\"approximate_extent_m\":48,\"location_scope\":\"point_or_small_site\",\"requires_specific_location\":false,\"map_url\":\"https://pokeit.cc/?lat=34.074635&lon=-84.292271&zoom=16\"}],\"provider_coverage\":\"US only\",\"attribution\":\"\u00a9 OpenStreetMap contributors\",\"note\":\"Coordinates are representative place points, not a user-selected center or proof of scan coverage. A city or large park requires a specific entrance, landmark, intersection, map pin or coordinates; do not silently scan its center. Multiple plausible candidates also need clarification. Outside the US use supplied coordinates.\"}",
+    "type": "text"
+   }
+  ],
+  "isError": false,
+  "structuredContent": {
+   "query": "Alpharetta City Hall",
+   "places": [
+    {
+     "label": "Alpharetta City Hall, 2, Park Plaza, Alpharetta, Fulton County, Georgia, 30009, United States",
+     "lat": 34.07463485,
+     "lon": -84.29227051021945,
+     "type": "townhall",
+     "country_code": "us",
+     "bounding_box": [
+      "34.0744135",
+      "34.0748485",
+      "-84.2924641",
+      "-84.2920769"
+     ],
+     "approximate_extent_m": 48,
+     "location_scope": "point_or_small_site",
+     "requires_specific_location": false,
+     "map_url": "https://pokeit.cc/?lat=34.074635&lon=-84.292271&zoom=16"
+    }
+   ],
+   "provider_coverage": "US only",
+   "attribution": "\u00a9 OpenStreetMap contributors",
+   "note": "Coordinates are representative place points, not a user-selected center or proof of scan coverage. A city or large park requires a specific entrance, landmark, intersection, map pin or coordinates; do not silently scan its center. Multiple plausible candidates also need clarification. Outside the US use supplied coordinates."
+  }
+ }
+}

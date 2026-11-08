@@ -33,6 +33,12 @@ Hermes calls the hosted PokeIt MCP server, which answers from observations on th
 
 Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart.
 
+## Hermes Desktop
+
+On Hermes 0.23.0 or newer, open **PokeIt Radar** from the status bar. Pick a spot to see catches by distance and bearing, or let catch cards in your chat bring them into view. Cards show live countdowns; scan cards show reported progress. Radar reads existing observations. New scans still use the agent's approval prompt.
+
+If Desktop connects to a remote gateway, install and enable PokeIt on that gateway's selected profile too. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
+
 ## Tools
 
 | Tool | What it does |
@@ -46,7 +52,7 @@ Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering 
 
 ## What leaves your machine
 
-- Each tool call sends coordinates, place text and filters to `https://mcp.pokeit.cc`, which PokeIt runs. Nothing else is sent: no files, no credentials, no conversation text. This package has no code of its own.
+- Each tool call sends coordinates, place text and filters to `https://mcp.pokeit.cc`, which PokeIt runs. No files, credentials or conversation text are sent. Desktop uses the same host through a read-only Python proxy in your Hermes gateway, with a short in-memory cache. Opening a map link opens `https://pokeit.cc` in your browser.
 - The service keeps tool names, filters, timings and result counts for about 14 days. A scan request keeps its coordinates and request ID for 24 hours, plus a keyed hash of your network address (not the address) to apply the trial limit. Ordinary web logs hold IP, path, time and status.
 - This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
@@ -69,7 +75,7 @@ Any MCP client can connect to `https://mcp.pokeit.cc/mcp` over Streamable HTTP. 
 
 ## Package
 
-`plugin.json`, `mcp.json` and one skill, with no `plugin.yaml`: with one present, Hermes skips the portable MCP tools.
+`plugin.json`, `mcp.json`, one skill, `desktop/plugin.js` and a small `dashboard/` proxy. No extra dependencies or build step. No `plugin.yaml`: with one present, Hermes skips the portable MCP tools.
 
 ---
 
