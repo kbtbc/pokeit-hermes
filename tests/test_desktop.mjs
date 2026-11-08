@@ -6,9 +6,11 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../desktop/plugin.js', import.meta.url), 'utf8');
 function atom(value) {
-  return { get: () => value, set: next => { value = next; }, subscribe: fn => { fn(value); return () => {}; } };
+  const subscribers = new Set();
+  return { get: () => value, set: next => { value = next; subscribers.forEach(fn => fn(value)); },
+    subscribe: fn => { subscribers.add(fn); fn(value); return () => subscribers.delete(fn); } };
 }
-const host = { state: { focusedStoredSessionId: atom('test'), focusedSessionId: atom('test'), profile: atom('default'), gateway: atom('open') } };
+const host = { notify: () => {}, state: { focusedStoredSessionId: atom('test'), focusedSessionId: atom('test'), profile: atom('default'), connectionId: atom('fixture'), gateway: atom('open') } };
 const sdk = { host, atom, useValue: a => a.get(), useTheme: () => ({ resolvedMode: 'dark' }), gatewayActivationEpoch: () => 1,
   PANES_AREA: 'panes', STATUSBAR_AREAS: { right: 'statusBar.right' }, TRANSCRIPT_DIRECTIVE_AREA: 'transcript.directives' };
 const react = { useEffect: () => {}, useState: () => {}, useId: () => 'id' };
@@ -121,4 +123,91 @@ test('standalone Radar follow-ups include the named place and precise map pin', 
   assert.match(raids, /Keep eggs separate/);
   assert.match(ui.followUpQuestion('events', s), /Rattata useful today/);
   assert.equal(ui.followUpQuestion('raids', { center: null }), null);
+});
+
+const flush = () => new Promise(resolve => setImmediate(resolve));
+function watchHarness(api) {
+  const timers = [], notices = [], disposers = [], events = {}, storage = new Map();
+  let time = Date.parse('2026-11-07T22:00:00Z');
+  const ctx = { storage: { get: (k, fallback) => storage.get(k) ?? fallback, set: (k, v) => storage.set(k, v) },
+    setInterval: (callback, ms) => { const t = { callback, ms, stopped: false }; timers.push(t); return () => { t.stopped = true; }; },
+    onEvent: (name, fn) => { events[name] = fn; }, onDispose: fn => disposers.push(fn),
+    os: { notify: n => notices.push({ kind: 'os', ...n }) }, pet: { say: body => { notices.push({ kind: 'pet', body }); return () => {}; } } };
+  const watch = ui.createHuntWatch(ctx, { api, now: () => time, onFound: () => {} });
+  return { watch, ctx, timers, notices, events, storage, advance: ms => { time += ms; }, dispose: () => disposers.forEach(f => f()) };
+}
+const watchCenter = { lat: 34, lon: -84 };
+const match = (id, iv = 100) => ({ observation_id: 'pid_' + id, name: 'Dratini', lat: 34.001, lon: -84, iv_percent: iv,
+  expires_at: '2026-11-07T23:00:00Z', expiry_verified: true });
+
+test('watch filters match the chosen criterion, exact spot, live expiry and evolved PvP rank', () => {
+  const config = { center: watchCenter, kind: 'highlights', minIV: 90 }, now = Date.parse('2026-11-07T22:00:00Z');
+  assert.equal(ui.watchMatches(match('hundo'), config, now), true);
+  assert.equal(ui.watchMatches(match('ordinary', 99), config, now), false);
+  assert.equal(ui.watchMatches(match('nundo', 0), { ...config, kind: 'nundo' }, now), true);
+  assert.equal(ui.watchMatches({ ...match('evolution', 70), pvp_iv_rankings: { ultra: [{ rank: 1, ranked_species_name: 'Dragonite' }] } }, { ...config, kind: 'pvp' }, now), true);
+  assert.equal(ui.watchMatches({ ...match('far'), lat: 35 }, config, now), false);
+  assert.equal(ui.watchMatches({ ...match('expired'), expires_at: '2026-11-07T21:59:59Z' }, config, now), false);
+  for (const [kind, key, value] of [['hundo', 'min_iv', '100'], ['nundo', 'max_iv', '0'], ['iv', 'min_iv', '90']]) {
+    const query = new URL(ui.watchQuery({ ...config, kind }), 'https://test').searchParams;
+    assert.equal(query.get(key), value); assert.equal(query.get('radius_m'), '500'); assert.equal(query.get('selection'), 'all');
+  }
+});
+
+test('watch starts only on request, aggregates and dedupes observations, throttles two minutes and stops polling', async () => {
+  let reads = 0, rows = [match('a'), match('b')];
+  const f = watchHarness(async () => { reads++; return { observations: rows, truncated: false }; });
+  assert.equal(reads, 0); assert.equal(f.timers.length, 0);
+  assert.equal(f.watch.start('test', watchCenter, 'City Hall'), true);
+  await flush(); assert.equal(reads, 1); assert.equal(f.timers[0].ms, 60000);
+  assert.equal(f.notices.filter(n => n.kind === 'os').length, 1);
+  assert.match(f.notices[0].body, /Found 2 matches/);
+  f.advance(60000); rows = [...rows, match('c')]; await f.watch.poll();
+  assert.equal(f.notices.filter(n => n.kind === 'os').length, 1);
+  f.advance(60000); await f.watch.poll();
+  assert.equal(f.notices.filter(n => n.kind === 'os').length, 2);
+  assert.match(f.notices.filter(n => n.kind === 'os')[1].body, /Found 1 match/);
+  f.advance(120000); await f.watch.poll(); assert.equal(f.notices.filter(n => n.kind === 'os').length, 2);
+  f.watch.stop(); assert.equal(f.timers[0].stopped, true);
+  const before = reads; await f.watch.poll(); assert.equal(reads, before); assert.equal(f.watch.view.get().active, false);
+  f.dispose();
+});
+
+test('stopping a watch ignores in-flight results, and failed polls remain visible without notification spam', async () => {
+  let resolve;
+  const f = watchHarness(() => new Promise(r => { resolve = r; }));
+  f.watch.start('test', watchCenter, 'City Hall'); f.watch.stop();
+  resolve({ observations: [match('late')] }); await flush();
+  assert.equal(f.notices.length, 0); assert.equal(f.watch.view.get().active, false); f.dispose();
+  const bad = watchHarness(async () => { throw Error('Read failed'); });
+  bad.watch.start('test', watchCenter, 'City Hall'); await flush();
+  assert.equal(bad.watch.view.get().error, 'Read failed'); assert.equal(bad.watch.view.get().active, true);
+  assert.equal(bad.notices.length, 0); bad.dispose();
+});
+
+test('a rejected OS notification does not fail the successful watch read or escape as an unhandled promise', async () => {
+  const f = watchHarness(async () => ({ observations: [match('notify-failure')], truncated: false }));
+  f.ctx.os.notify = () => Promise.reject(Error('OS bridge refused'));
+  f.watch.start('test', watchCenter, 'City Hall'); await flush();
+  assert.equal(f.watch.view.get().error, ''); assert.equal(f.watch.view.get().matched, 1);
+  assert.match(f.watch.view.get().notice, /Found 1 match/);
+  assert.match(f.watch.view.get().notificationNote, /OS alerts are unavailable/);
+  assert.equal(f.watch.view.get().active, true); f.dispose();
+});
+
+test('watch preferences are profile-scoped, never persist location or autostart, and profile/disposal cancels timers', async () => {
+  const f = watchHarness(async () => ({ observations: [], truncated: true }));
+  f.watch.configure({ kind: 'iv', minIV: 90 });
+  const stored = [...f.storage.values()][0];
+  assert.equal(JSON.stringify(stored), '{"kind":"iv","minIV":90}');
+  f.watch.start('test', watchCenter, 'City Hall'); await flush();
+  assert.equal(f.watch.view.get().truncated, true);
+  host.state.profile.set('other-profile');
+  assert.equal(f.watch.view.get().active, false); assert.equal(f.timers[0].stopped, true);
+  assert.equal(f.watch.view.get().kind, 'highlights');
+  host.state.profile.set('default'); assert.equal(f.watch.view.get().kind, 'iv');
+  f.watch.start('test', watchCenter, 'City Hall'); await flush();
+  f.events['gateway.ready'](); assert.equal(f.watch.view.get().active, false);
+  f.watch.start('test', watchCenter, 'City Hall'); await flush(); f.dispose();
+  assert.equal(f.timers.at(-1).stopped, true);
 });

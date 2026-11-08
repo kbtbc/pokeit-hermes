@@ -1,5 +1,11 @@
 # PokeIt release notes
 
+## 0.1.12 · November 7, 2026 · 9:17 PM ET (EST, UTC-05:00)
+
+- Hunt Watch checks a selected Radar spot for hundos, nundos, PvP rank #1 or a minimum IV. Start and stop it yourself; it reads existing observations without starting scans.
+- New matches appear in the app, with OS notifications when Hermes is in the background and notifications are allowed. Repeat alerts are limited.
+- Watch filters are remembered locally; watched locations stay in memory. Switching profile or connection stops the watch.
+
 ## 0.1.11 · November 7, 2026 (ET)
 
 - Hermes Desktop radar with live catches, compass directions and map links.

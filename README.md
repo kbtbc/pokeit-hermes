@@ -39,6 +39,8 @@ On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git**
 
 The Desktop installer adds the interface locally and the backend to your selected gateway profile. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
 
+**Hunt Watch:** pick a Radar spot and a catch filter, then choose **Watch this spot**. It checks existing observations within 500 m about once a minute and alerts you to new matches. Choose **Stop watch** to finish; switching profile or connection also stops it. It never starts scans. Matches appear in the app, with OS notifications when Hermes is in the background and notifications are allowed.
+
 ## Tools
 
 | Tool | What it does |
@@ -57,6 +59,7 @@ The Desktop installer adds the interface locally and the backend to your selecte
 - This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
+- Hunt Watch saves your filter and minimum IV locally per gateway/profile. Its watched location and seen catches stay in memory; it does not resume automatically after reopening the app.
 - The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
 
 ## If the tools disappear

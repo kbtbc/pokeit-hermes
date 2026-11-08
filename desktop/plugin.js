@@ -2,7 +2,7 @@ import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STA
 import { useEffect, useState, useId } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.11';
+const VERSION = '0.1.12';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -116,6 +116,92 @@ function useActiveSession() {
   const runtime = useValue(host.state.focusedSessionId);
   return stored || runtime || 'new';
 }
+const WATCH_KINDS = { highlights: 'Highlights', hundo: 'Hundos', nundo: 'Nundos', pvp: 'PvP rank #1', iv: 'IV at least' };
+function watchScope() { return JSON.stringify([host.state.connectionId?.get() || 'local', host.state.profile.get() || 'default']); }
+function watchPrefs(value) {
+  return { kind: Object.hasOwn(WATCH_KINDS, value?.kind) ? value.kind : 'highlights',
+    minIV: Number.isInteger(value?.minIV) && value.minIV >= 0 && value.minIV <= 100 ? value.minIV : 90 };
+}
+export function watchQuery(config) {
+  const params = { lat: config.center.lat, lon: config.center.lon, radius_m: 500, limit: 50, order: 'priority',
+    selection: ['iv', 'hundo', 'nundo'].includes(config.kind) ? 'all' : 'highlights' };
+  if (config.kind === 'hundo') params.min_iv = 100;
+  if (config.kind === 'nundo') params.max_iv = 0;
+  if (config.kind === 'iv') params.min_iv = config.minIV;
+  return '/nearby?' + new URLSearchParams(params);
+}
+export function watchMatches(p, config, now) {
+  const distance = distanceBearing(config.center, p), timer = expiry(p, now);
+  if (!ID.test(p?.observation_id || '') || !distance || distance.meters > 500 || timer.seconds !== null && timer.seconds <= 0) return false;
+  return config.kind === 'hundo' ? p.iv_percent === 100 : config.kind === 'nundo' ? p.iv_percent === 0
+    : config.kind === 'pvp' ? hasRankOne(p) : config.kind === 'iv' ? number(p.iv_percent) && p.iv_percent >= config.minIV
+      : p.iv_percent === 100 || p.iv_percent === 0 || hasRankOne(p);
+}
+export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
+  const saved = () => watchPrefs(ctx.storage?.get('watch-preferences:' + watchScope(), null));
+  const view = atom({ ...saved(), active: false, busy: false, error: '', lastChecked: null, matched: 0, truncated: false, label: '', notice: '', notificationNote: '' });
+  let current = null, alive = true, cancelTimer = null, clearBubble = null;
+  const alerts = new Map();
+  const patch = changes => view.set({ ...view.get(), ...changes });
+  const valid = run => alive && current === run && run.scope === watchScope() && run.epoch === gatewayActivationEpoch();
+  function stop(notice = 'Watch stopped.') {
+    current = null; cancelTimer?.(); cancelTimer = null; clearBubble?.(); clearBubble = null;
+    patch({ active: false, busy: false, notice });
+  }
+  function configure(value) {
+    if (current) return;
+    const prefs = watchPrefs(value); patch(prefs);
+    ctx.storage?.set('watch-preferences:' + watchScope(), prefs);
+  }
+  async function poll() {
+    const run = current;
+    if (!run || !valid(run) || view.get().busy) return;
+    patch({ busy: true });
+    try {
+      const data = await api(watchQuery(run));
+      if (!valid(run)) return;
+      const matches = [...new Map((Array.isArray(data.observations) ? data.observations : [])
+        .filter(p => watchMatches(p, run, now())).map(p => [p.observation_id, p])).values()].slice(0, 50);
+      const fresh = matches.filter(p => !run.seen.has(p.observation_id));
+      patch({ busy: false, error: '', lastChecked: now(), matched: matches.length, truncated: !!data.truncated,
+        notice: matches.length ? `${matches.length} matching ${matches.length === 1 ? 'catch' : 'catches'} in the latest read.` : 'No matching catches in the latest read.' });
+      const alertKey = run.scope + ':' + run.kind;
+      if (!fresh.length || now() - (alerts.get(alertKey) ?? -Infinity) < 120000) return;
+      alerts.set(alertKey, now());
+      // IDs are catch observations, not species. Keep bounded memory for a long-running watch.
+      for (const p of fresh) run.seen.add(p.observation_id);
+      while (run.seen.size > 1024) run.seen.delete(run.seen.values().next().value);
+      const names = fresh.slice(0, 2).map(p => `${text(p.name, 35)} (${metric(p)})`).join(', ');
+      const body = `Found ${fresh.length} ${fresh.length === 1 ? 'match' : 'matches'} near ${run.label}: ${names}${fresh.length > 2 ? ` +${fresh.length - 2} more` : ''}.`;
+      patch({ notice: body });
+      clearBubble?.(); clearBubble = ctx.pet?.say(body, { id: 'hunt-watch', tone: 'info', ttlMs: 10000 });
+      host.notify({ kind: 'info', message: body });
+      // Hosts may deliver through an asynchronous bridge. A notification failure is not a failed data read.
+      void Promise.resolve().then(() => {
+        if (!valid(run)) return;
+        return ctx.os?.notify?.({ title: 'PokeIt Hunt Watch', body, onActivate: () => {
+          if (alive && run.scope === watchScope() && run.epoch === gatewayActivationEpoch()) onFound(run.sid, fresh[0], run.center);
+        } });
+      }).catch(() => { if (valid(run)) patch({ notificationNote: 'OS alerts are unavailable. Your matches are shown here.' }); });
+    } catch (e) {
+      if (valid(run)) patch({ busy: false, error: text(e.message, 240), notice: 'Could not check. Trying again in about a minute.' });
+    }
+  }
+  function start(sid, center, label) {
+    if (!alive || ![center?.lat, center?.lon].every(number) || Math.abs(center.lat) > 85 || Math.abs(center.lon) > 180) return false;
+    stop('');
+    current = { ...watchPrefs(view.get()), sid, center: { ...center }, label: text(label, 80) || 'this spot',
+      scope: watchScope(), epoch: gatewayActivationEpoch(), seen: new Set() };
+    patch({ active: true, busy: false, error: '', lastChecked: null, matched: 0, truncated: false, label: current.label, notice: 'Checking this spot…', notificationNote: '' });
+    cancelTimer = ctx.setInterval(() => { void poll(); }, 60000);
+    void poll(); return true;
+  }
+  function reset() { stop(''); patch({ ...saved(), label: '', lastChecked: null, error: '', notice: '', notificationNote: '' }); }
+  const subscriptions = [host.state.profile.subscribe(reset), host.state.connectionId?.subscribe(reset)].filter(Boolean);
+  ctx.onEvent('gateway.ready', reset);
+  ctx.onDispose(() => { stop(''); alive = false; subscriptions.forEach(unsubscribe => unsubscribe()); alerts.clear(); });
+  return { view, start, stop, configure, poll };
+}
 export function createController(ctx) {
   const revision = atom(0), clock = atom(Date.now()), sessions = new Map();
   let alive = true, lastError = '', healthy = null;
@@ -181,7 +267,9 @@ export function createController(ctx) {
     const ok = await ctx.os.writeClipboard(JSON.stringify(report, null, 2));
     host.notify({ kind: ok ? 'info' : 'warning', message: ok ? 'PokeIt debug info copied. No location or chat text included.' : 'Could not copy debug info.' });
   }
-  return { ctx, revision, clock, state, update, api, read, adopt, debug, healthy: () => healthy };
+  const controller = { ctx, revision, clock, state, update, api, read, adopt, debug, healthy: () => healthy };
+  controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center) => showInRadar(controller, sid, observation, center) });
+  return controller;
 }
 function useRadar(ctrl, sid) { useValue(ctrl.revision); return ctrl.state(sid); }
 async function draft(textValue, sid = null) {
@@ -212,6 +300,28 @@ function FollowUps({ ctrl, c, sid }) {
     const question = followUpQuestion(kind, ctrl.state(sid));
     if (question) void draft(question, sid);
   }, children: label }, label)) });
+}
+function HuntWatch({ ctrl, c, sid, center, label }) {
+  const w = useValue(ctrl.watch.view), id = useId();
+  return hs('section', { 'aria-label': 'Hunt Watch', style: { ...panel(c), marginTop: 14 }, children: [
+    h('strong', { children: 'Hunt Watch' }),
+    h('p', { style: fine(c), children: w.active ? `Watching ${w.label} · 500 m` : 'Watch this spot for worthwhile catches.' }),
+    h('label', { htmlFor: id, style: fine(c), children: 'Alert me about' }),
+    h('select', { id, value: w.kind, disabled: w.active, onChange: e => ctrl.watch.configure({ ...w, kind: e.target.value }),
+      style: { width: '100%', background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: 8, marginTop: 4 },
+      children: Object.entries(WATCH_KINDS).map(([value, name]) => h('option', { value, children: name }, value)) }),
+    w.kind === 'iv' && hs('label', { style: { ...fine(c), display: 'block', marginTop: 8 }, children: ['Minimum IV % ',
+      h('input', { type: 'number', min: 0, max: 100, step: 1, value: w.minIV, disabled: w.active,
+        onChange: e => ctrl.watch.configure({ ...w, minIV: Number(e.target.value) }),
+        style: { width: 65, background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 6 } })] }),
+    h(Button, { c, primary: !w.active, style: { marginTop: 10 }, disabled: !w.active && !center,
+      onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop watch' : 'Watch this spot' }),
+    h('p', { role: 'status', style: fine(c), children: w.busy ? 'Checking existing observations…' : w.notice }),
+    w.error && h(ErrorNote, { c, message: w.error }),
+    w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
+    w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' }),
+    h('small', { style: fine(c), children: 'Checks existing data about once a minute. No scans start. Stops when you change profile or connection. OS alerts appear when Hermes is in the background.' })
+  ] });
 }
 function CatchSummary({ ctrl, c, p, center, sid, compact = false }) {
   const now = useValue(ctrl.clock), timer = expiry(p, now);
@@ -331,6 +441,7 @@ function RadarPane({ ctrl, sessionId }) {
       style: { marginTop: 8, width: '100%', background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: 8 }, children: s.observations.map(p => h('option', { value: p.observation_id, children: `${text(p.name)} · ${metric(p)}` }, p.observation_id)) }),
     s.center && h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open full map ↗' }),
     h(FollowUps, { ctrl, c, sid }),
+    h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label }),
     h('p', { style: { ...fine(c), marginTop: 12 }, children: 'The pin is the search point, not your live GPS position. No new scans start in this pane.' }),
     h(Button, { c, style: { background: 'transparent', fontSize: 11 }, onClick: () => void ctrl.debug(), children: 'Copy debug info' })
   ] });
@@ -401,11 +512,11 @@ function ScanCard({ ctrl, attrs, streaming }) {
 }
 function StatusChip({ ctrl }) {
   const c = useColors(), sid = useActiveSession();
-  const s = useRadar(ctrl, sid), now = useValue(ctrl.clock);
+  const s = useRadar(ctrl, sid), now = useValue(ctrl.clock), watch = useValue(ctrl.watch.view);
   const liveCount = s.observations.filter(p => !expiry(p, now).expired).length;
   return h('button', { type: 'button', title: 'Open PokeIt Radar', style: { font: `600 11px ${font}`, cursor: 'pointer', color: 'var(--ui-text-secondary)', background: 'transparent', border: 0, padding: '2px 6px' },
     onClick: () => openRadar(ctrl, sid),
-    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] }) });
+    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), watch.active ? ' · watching' : s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] }) });
 }
 
 export default {

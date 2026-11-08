@@ -30,13 +30,16 @@ import React,{useState} from 'react'; import {createRoot} from 'react-dom/client
 import plugin from ${JSON.stringify(resolve(project, 'desktop/plugin.js'))};
 import {segmentTranscriptDirectives} from ${JSON.stringify(resolve(root, 'apps/desktop/src/lib/transcript-directives.ts'))};
 import {mode} from './sdk.js';
-const h=React.createElement, contributions=[], calls=[],disposers=[];window.calls=calls;window.drafts=[];window.notices=[];
+const h=React.createElement, contributions=[], calls=[],disposers=[];window.calls=calls;window.drafts=[];window.notices=[];window.syntheticNotifications=[];
 const center={lat:34.074612345678901,lon:-84.29221234567890}, now=Date.now();
 const cardDirective=segmentTranscriptDirectives('::pokeit-catch{id="pid_fixture_a" lat="34.076000" lon="-84.290000" origin_lat="34.074612345678901" origin_lon="-84.29221234567890"}')[0].directive;
 const catches=[{observation_id:'pid_fixture_a',name:'Dratini',lat:34.076,lon:-84.290,iv_percent:100,iv_attack:15,iv_defense:15,iv_stamina:15,cp:391,expires_at:new Date(now+14*60000).toISOString(),expiry_verified:true,map_url:'https://pokeit.cc/pokemon/pid_fixture_a'},
 {observation_id:'pid_fixture_b',name:'Murkrow',lat:34.0733,lon:-84.2931,iv_percent:73.3,iv_attack:0,iv_defense:15,iv_stamina:15,cp:711,expires_at:new Date(now+84000).toISOString(),expiry_verified:false,map_url:'https://pokeit.cc/pokemon/pid_fixture_b',pvp_iv_rankings:{ultra:[{rank:1,ranked_species_name:'Honchkrow',same_species_as_observation:false}]}}];
 let scanCalls=0;
-const ctx={register:c=>contributions.push(c),setInterval:(f,n)=>{const t=setInterval(f,n);disposers.push(()=>clearInterval(t));return()=>clearInterval(t)},setTimeout:(f,n)=>{const t=setTimeout(f,n);return()=>clearTimeout(t)},onEvent:()=>{},onDispose:f=>disposers.push(f),os:{openExternal:async()=>true,writeClipboard:async text=>{window.clipboard=text;return true}},
+const prefs=new Map();
+const ctx={register:c=>contributions.push(c),setInterval:(f,n)=>{const t=setInterval(f,n);disposers.push(()=>clearInterval(t));return()=>clearInterval(t)},setTimeout:(f,n)=>{const t=setTimeout(f,n);return()=>clearTimeout(t)},onEvent:()=>{},onDispose:f=>disposers.push(f),
+storage:{get:(k,f)=>prefs.get(k)??f,set:(k,v)=>prefs.set(k,v)},pet:{say:()=>()=>{}},
+os:{notify:n=>window.syntheticNotifications.push(n.body),openExternal:async()=>true,writeClipboard:async text=>{window.clipboard=text;return true}},
 rest:async path=>{calls.push(path);let data;const u=new URL(path,'https://test');
 if(u.pathname==='/place')data={places:[{...center,choice_label:'Alpharetta City Hall, Georgia',requires_specific_location:false}]};
 else if(u.pathname==='/nearby')data={location:center,observations:catches,queried_at:new Date().toISOString(),truncated:false};
@@ -88,12 +91,20 @@ try {
   assert.ok(!(await page.evaluate(()=>window.clipboard)).includes('34.0746'));
   await page.getByText('Scan complete',{exact:true}).waitFor({timeout:10000});
   await page.getByText(/request age at check/).waitFor();
+  await page.getByLabel('Alert me about').selectOption('iv');
+  await page.getByLabel('Minimum IV %').fill('90');
+  await page.getByRole('button',{name:'Watch this spot',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'Found 1 match'}).waitFor();
+  assert.equal((await page.evaluate(()=>window.syntheticNotifications)).length,1);
+  assert.ok((await page.evaluate(()=>window.notices)).some(n=>n.message?.startsWith('Found 1 match')));
   await page.screenshot({path:resolve(output,'desktop-dark.png'),fullPage:true});
   await page.locator('#theme').click();
   await page.screenshot({path:resolve(output,'desktop-light.png'),fullPage:true});
+  await page.getByRole('button',{name:'Stop watch',exact:true}).click();
+  await page.getByText('Watch stopped.',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   const calls=await page.evaluate(()=>window.calls);
   assert.ok(calls.some(p=>p.startsWith('/nearby?')));
   assert.equal(calls.filter(p=>p.startsWith('/scan/')).length,2);
-  console.log(JSON.stringify({screenshots:['desktop-dark.png','desktop-light.png'],consoleErrors:errors,toolReads:calls.length,draftOnlyFollowUp:true,scanTerminal:true}));
+  console.log(JSON.stringify({screenshots:['desktop-dark.png','desktop-light.png'],consoleErrors:errors,toolReads:calls.length,draftOnlyFollowUp:true,scanTerminal:true,watchStartedAndStopped:true,notifications:'mocked only'}));
 } finally {await browser.close();server.close();}
