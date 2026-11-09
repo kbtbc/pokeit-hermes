@@ -12,6 +12,7 @@ const ICON = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
 const Frame = sdk.SandboxedFrame || null;
 const TERMINAL = new Set(['data_refreshed', 'existing_coverage', 'partial_unverified', 'failed']);
 const RADII = [100, 250, 500, 1000, 2000];
+const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
 const EXAMPLES = ['Alpharetta City Hall, Georgia', 'Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
@@ -327,6 +328,15 @@ export function createController(ctx) {
       update(sid, { gyms: rows(d.gyms), stops: rows(d.stops) });
     } catch { /* decoration only */ }
   }
+  async function fillBest(highlights, center, radius) {
+    if (highlights.length >= BEST_COUNT) return highlights;
+    try {
+      const d = await api('/nearby?' + new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: BEST_COUNT, selection: 'all', order: 'priority' }), true);
+      const have = new Set(highlights.map(p => p.observation_id));
+      const extra = (Array.isArray(d?.observations) ? d.observations : []).filter(p => p && !have.has(p.observation_id));
+      return [...highlights, ...extra].slice(0, Math.max(BEST_COUNT, highlights.length));
+    } catch { return highlights; }  // the highlights alone are still a true read
+  }
   async function read(sid, center, label, radius) {
     const s = state(sid), generation = s.generation + 1;
     update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null });
@@ -336,10 +346,13 @@ export function createController(ctx) {
       const [result, coverage] = await Promise.all([api('/nearby?' + params),
         api('/coverage?' + new URLSearchParams(center)).catch(() => null)]);
       if (!alive || state(sid).generation !== generation) return;
-      const observations = (Array.isArray(result.observations) ? result.observations : []).slice(0, 50);
+      const highlights = (Array.isArray(result.observations) ? result.observations : []).slice(0, 50);
+      // The same list the chat answer gives: highlights first, then the best by IV until there are four.
+      const observations = await fillBest(highlights, center, radius);
       if (!observations.length && result.highest_observed_iv) observations.push(result.highest_observed_iv);
+      if (!alive || state(sid).generation !== generation) return;
       update(sid, { observations, coverage, queriedAt: result.queried_at, truncated: !!result.truncated,
-        candidates: result.observed_candidates_in_radius, quietPick: !result.observations?.length && !!result.highest_observed_iv,
+        candidates: result.observed_candidates_in_radius, quietPick: !highlights.length && observations.length > 0,
         busy: false, selected: observations[0]?.observation_id || null });
       ctx.storage?.set('last-spot:' + watchScope(), { lat: center.lat, lon: center.lon, label: text(label, 100), radius });
     } catch (e) { if (alive && state(sid).generation === generation) update(sid, { busy: false, error: e.message }); }
@@ -663,7 +676,7 @@ export function radarNotice({ busy, queriedAt, quietPick, watching, shown, live,
     return 'No matching catches in this read. Try nearby raids or open the live map.';
   }
   if (!watching && ageSeconds !== null && ageSeconds >= STALE_AFTER_S) return `This read is ${ageLabel(ageSeconds)} old, so some of these may be gone. Refresh for a current read.`;
-  if (quietPick && !watching) return 'No highlights in this read. This is the highest observed IV catch.';
+  if (quietPick && !watching) return 'No hundos, nundos or PvP #1 in this read. These are the highest-IV catches.';
   return null;
 }
 function RadarPane({ ctrl, sessionId }) {

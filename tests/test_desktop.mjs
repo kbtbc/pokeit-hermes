@@ -358,7 +358,7 @@ test('the pane says one true thing about the read, never two that contradict eac
   // The single quiet pick has expired: only the expired line shows, not "no highlights" plus "no matching catches".
   assert.match(ui.radarNotice({ ...base, quietPick: true, shown: gone, live: [] }), /has expired/);
   assert.match(ui.radarNotice({ ...base, shown: [], live: [] }), /No matching catches/);
-  assert.match(ui.radarNotice({ ...base, quietPick: true }), /No highlights/);
+  assert.match(ui.radarNotice({ ...base, quietPick: true }), /No hundos, nundos or PvP/);
   // An old read outranks the quiet-pick note, and says how old it is.
   assert.match(ui.radarNotice({ ...base, quietPick: true, ageSeconds: 63 * 60 }), /63 minutes old/);
   assert.equal(ui.radarNotice({ ...base, busy: true }), null);
@@ -378,4 +378,22 @@ test('an old read is refreshed once when the pane is shown again, and a fresh or
   assert.equal(ui.ageLabel(60), '1 minute');
   assert.equal(ui.ageLabel(63 * 60), '63 minutes');
   assert.equal(ui.ageLabel(3 * 3600), '3 hours');
+});
+
+test('the Radar shows the same best-four list as the chat: highlights first, filled by IV, no duplicates, and a failed fill keeps the highlights', async () => {
+  const row = (id, extra = {}) => ({ observation_id: id, lat: 34, lon: -84, ...extra });
+  const make = fill => ui.createController({ setInterval: () => () => {}, onEvent: () => {}, onDispose: () => {},
+    rest: path => path.startsWith('/nearby?') && path.includes('selection=all') ? fill(path)
+      : path.startsWith('/nearby?') ? Promise.resolve({ ok: true, data: { observations: [row('pid_hl', { highlight: 'pvp_rank_1' })], queried_at: '2026-11-09T20:00:00Z' } })
+      : Promise.resolve({ ok: true, data: {} }) });
+  const fills = [];
+  const ok = make(path => { fills.push(path); return Promise.resolve({ ok: true, data: { observations: [row('pid_hl'), row('pid_a'), row('pid_b'), row('pid_c'), row('pid_d')] } }); });
+  await ok.read('t', { lat: 34, lon: -84 }, 'Spot', 500);
+  assert.equal(JSON.stringify(ok.state('t').observations.map(p => p.observation_id)), JSON.stringify(['pid_hl', 'pid_a', 'pid_b', 'pid_c']));
+  assert.equal(ok.state('t').quietPick, false);                         // there was a highlight, so no "no highlights" note
+  assert.match(fills[0], /order=priority/); assert.match(fills[0], /limit=4/);
+  const broken = make(() => Promise.reject(new Error('down')));
+  await broken.read('t', { lat: 34, lon: -84 }, 'Spot', 500);
+  assert.equal(JSON.stringify(broken.state('t').observations.map(p => p.observation_id)), JSON.stringify(['pid_hl']));
+  assert.equal(broken.state('t').error, '');
 });
