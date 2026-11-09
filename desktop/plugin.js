@@ -467,8 +467,8 @@ function Pips({ c, value }) {
   return h('div', { style: { flex: 1, minWidth: 90, display: 'grid', gridTemplateColumns: 'repeat(15, 1fr)', gap: 2 }, children:
     Array.from({ length: 15 }, (_, i) => h('span', { style: { height: 8, borderRadius: 2, background: i < v ? (v === 15 ? c.accent : c.blue) : c.raised } }, i)) });
 }
-function IvBars({ c, p }) {
-  return h('div', { style: { display: 'grid', gap: 6, marginTop: 14 }, children:
+function IvBars({ c, p, tight = false }) {
+  return h('div', { style: { display: 'grid', gap: tight ? 3 : 6, marginTop: tight ? 8 : 14 }, children:
     [['Attack', p.iv_attack], ['Defense', p.iv_defense], ['Stamina', p.iv_stamina]].map(([name, v]) => hs('div', { role: 'img', 'aria-label': `${name} ${number(v) ? v : 'unknown'} of 15`,
       style: { display: 'flex', alignItems: 'center', gap: 10 }, children: [
         h('span', { style: { ...fine(c), width: 56, flexShrink: 0 }, children: name }),
@@ -521,8 +521,8 @@ function CatchSummary({ ctrl, c, p, center, sid, place, inPane = false }) {
   const now = useValue(ctrl.clock), timer = expiry(p, now), gone = timer.expired, verified = p.expiry_verified === true;
   const hl = highlight(p, c), rank = rankLabel(p), d = distanceBearing(center, p);
   const verdict = !gone && d ? walkVerdict(d.meters, timer.seconds, verified) : null;
-  return hs('div', { style: { ...rowStyle, gap: 22, alignItems: 'center', minWidth: 0 }, children: [
-    h(HeroArt, { ctrl, c, p, size: inPane ? 96 : 150, dim: gone, sparkle: p.iv_percent === 100 }),
+  return hs('div', { style: { ...rowStyle, gap: inPane ? 14 : 22, alignItems: 'center', minWidth: 0 }, children: [
+    h(HeroArt, { ctrl, c, p, size: inPane ? 80 : 150, dim: gone, sparkle: p.iv_percent === 100 }),
     hs('div', { style: { flex: inPane ? '1 1 150px' : '1 1 200px', minWidth: 0, opacity: gone ? .65 : 1 }, children: [
       hs('div', { style: { ...rowStyle, gap: 10 }, children: [
         h('strong', { style: { fontSize: inPane ? 20 : 28, lineHeight: 1.15 }, children: text(p.name, 80) || 'Pokémon' }),
@@ -532,12 +532,12 @@ function CatchSummary({ ctrl, c, p, center, sid, place, inPane = false }) {
       h('div', { style: { fontSize: 14, marginTop: 3 }, children: [metric(p), number(p.cp) && `CP ${p.cp}`, number(p.level) && `Lv ${p.level}`].filter(Boolean).join(' · ') }),
       inPane && hs('div', { style: { ...fine(c), display: 'flex', alignItems: 'center', gap: 5 }, children: [
         d && d.meters >= 10 && h(Arrow, { c, degrees: d.bearing }), distanceLabel(center, p, place), timer.seconds > 0 && ` · ${timer.label} left`] }),
-      verdict && hs('div', { style: { ...rowStyle, gap: 10, marginTop: 12 }, children: [
+      verdict && hs('div', { style: { ...rowStyle, gap: 10, marginTop: inPane ? 8 : 12 }, children: [
         h(VerdictPill, { c, verdict }), h('span', { style: fine(c), children: verdict.detail })] }),
-      !gone && h(IvBars, { c, p }),
-      !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 8 }, children: rank }),
-      !gone && hs('div', { style: { ...rowStyle, marginTop: 14 }, children: [
-        h(Button, { c, primary: true, style: { padding: '10px 16px', fontSize: 13 }, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
+      !gone && h(IvBars, { c, p, tight: inPane }),
+      !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: inPane ? 5 : 8 }, children: rank }),
+      !gone && hs('div', { style: { ...rowStyle, marginTop: inPane ? 10 : 14 }, children: [
+        h(Button, { c, primary: true, style: { padding: inPane ? '7px 14px' : '10px 16px', fontSize: 13 }, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
         !inPane && h(Button, { c, style: { padding: '10px 16px', fontSize: 13 }, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show on map' })
       ] })
     ] }),
