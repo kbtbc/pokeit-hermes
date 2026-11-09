@@ -640,27 +640,69 @@ function ResultRow({ ctrl, c, p, center, selected, now, onSelect, isNew = false 
     h('span', { style: { fontVariantNumeric: 'tabular-nums', fontSize: 12, color: timer.low ? c.red : c.muted }, children: timer.seconds > 0 ? timer.label : '' })
   ] });
 }
+// A read this old may show catches that have despawned; the pane refreshes it when it is shown again.
+const STALE_AFTER_S = 300;
+export function readAgeSeconds(queriedAt, now) {
+  const t = Date.parse(queriedAt || '');
+  return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / 1000)) : null;
+}
+export function ageLabel(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 120 ? `${Math.max(1, minutes)} ${minutes === 1 ? 'minute' : 'minutes'}` : `${Math.floor(minutes / 60)} hours`;
+}
+export function needsRefresh(s, now) {
+  const age = readAgeSeconds(s?.queriedAt, now);
+  return !!s?.center && !s.busy && age !== null && age >= STALE_AFTER_S;
+}
+// One line about the read, never two that contradict each other. Expired-everything outranks an old read,
+// and an old read outranks the quiet-pick note.
+export function radarNotice({ busy, queriedAt, quietPick, watching, shown, live, ageSeconds }) {
+  if (busy || !queriedAt) return null;
+  if (!live.length) {
+    if (shown.length) return 'Every catch in this read has expired. Refresh for a new read.';
+    return 'No matching catches in this read. Try nearby raids or open the live map.';
+  }
+  if (!watching && ageSeconds !== null && ageSeconds >= STALE_AFTER_S) return `This read is ${ageLabel(ageSeconds)} old, so some of these may be gone. Refresh for a current read.`;
+  if (quietPick && !watching) return 'No highlights in this read. This is the highest observed IV catch.';
+  return null;
+}
 function RadarPane({ ctrl, sessionId }) {
   const c = useColors(), active = useActiveSession(), sid = sessionId || active;
   const s = useRadar(ctrl, sid), now = useValue(ctrl.clock), w = useValue(ctrl.watch.view);
+  // Coming back to an old read (the pane reopened, or the window shown again) reads the same spot once more. It is an existing-data read, never a scan.
+  useEffect(() => {
+    const check = () => {
+      const cur = ctrl.state(sid);
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (needsRefresh(cur, Date.now()) && !(ctrl.watch.view.get().active)) void ctrl.read(sid, cur.center, cur.label, cur.radius);
+    };
+    check();
+    if (typeof document === 'undefined') return undefined;
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
+  }, [ctrl, sid]);
   // While Hunt Watch runs on this spot, its matches join the map and the list; the ones new in the latest read are marked.
   const watching = !!(w.active && s.center && w.center && distanceBearing(s.center, w.center)?.meters < 5);
   const known = new Set(s.observations.map(p => p.observation_id));
   const shown = watching ? [...s.observations, ...w.matches.filter(p => !known.has(p.observation_id))] : s.observations;
   const view = watching ? { ...s, observations: shown } : s, fresh = new Set(watching ? w.fresh : []);
   const live = shown.filter(p => !expiry(p, now).expired).sort((a, b) => fresh.has(b.observation_id) - fresh.has(a.observation_id));
-  const selected = shown.find(p => p.observation_id === s.selected), place = named(s.label);
+  // An expired catch is not shown as if it were still there; the next live one stands in, or nothing does.
+  const picked = shown.find(p => p.observation_id === s.selected);
+  const selected = picked && !expiry(picked, now).expired ? picked : live[0] || null, place = named(s.label);
   const last = !s.center && !s.busy ? ctrl.lastSpot() : null;
   const status = s.coverage?.scan_plan?.status;
   const age = s.queriedAt ? Math.max(0, Math.floor((now - Date.parse(s.queriedAt)) / 1000)) : null;
   const next = watching && w.lastChecked ? Math.max(0, 60 - Math.floor((now - w.lastChecked) / 1000)) : null;
+  const notice = radarNotice({ busy: s.busy, queriedAt: s.queriedAt, quietPick: s.quietPick, watching, shown, live, ageSeconds: age });
+  const stale = !watching && age !== null && age >= STALE_AFTER_S;
   const landmarks = [s.gyms.length && `${s.gyms.length} ${s.gyms.length === 1 ? 'gym' : 'gyms'}`, s.stops.length && `${s.stops.length} Pokéstops`].filter(Boolean).join(' · ');
   return hs('section', { 'aria-label': 'PokeIt Radar', style: { background: c.surface, color: c.fg, padding: 14, overflowY: 'auto', height: '100%', fontFamily: font, boxSizing: 'border-box' }, children: [
     h(Styles, {}),
     hs('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }, children: [
       hs('div', { style: { minWidth: 0 }, children: [hs('h2', { style: { fontSize: 19, fontWeight: 800, margin: 0 }, children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), ' Radar'] }),
         h('p', { style: { ...fine(c), margin: '4px 0 0' }, children: s.center ? s.label : 'Follows your chat' })] }),
-      s.center && h(Button, { c, disabled: s.busy, onClick: () => void ctrl.read(sid, s.center, s.label, s.radius), children: s.busy ? 'Reading…' : 'Refresh' })
+      s.center && h(Button, { c, primary: stale || (!live.length && !!shown.length), disabled: s.busy, onClick: () => void ctrl.read(sid, s.center, s.label, s.radius), children: s.busy ? 'Reading…' : 'Refresh' })
     ] }),
     h(ErrorNote, { c, message: s.error }),
     !s.center ? hs('div', { style: { textAlign: 'center', marginTop: 8 }, children: [
@@ -690,8 +732,7 @@ function RadarPane({ ctrl, sessionId }) {
           })
         ] }),
         hs('div', { style: { minWidth: 0 }, children: [
-          s.quietPick && !watching && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No highlights in this read. This is the highest observed IV catch.' }),
-          !s.busy && s.queriedAt && !live.length && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No matching catches in this read. Try nearby raids or open the live map.' }),
+          notice && h('p', { role: 'status', style: { ...fine(c), marginTop: 0 }, children: notice }),
           selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
           live.length > 1 && h('div', { 'aria-label': watching ? 'Catches on watch' : 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
             children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, isNew: fresh.has(p.observation_id), selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) }),

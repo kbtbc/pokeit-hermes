@@ -350,3 +350,32 @@ test('a running watch keeps its matches for the map and marks only later arrival
   same(f.watch.view.get().fresh, [rows[1].observation_id]);
   f.watch.stop(); same(f.watch.view.get().matches, []); assert.equal(f.watch.view.get().center, null); f.dispose();
 });
+
+test('the pane says one true thing about the read, never two that contradict each other', () => {
+  const live = [{ observation_id: 'pid_a' }], gone = [{ observation_id: 'pid_b' }];
+  const base = { busy: false, queriedAt: '2026-11-09T19:00:00Z', quietPick: false, watching: false, shown: live, live, ageSeconds: 30 };
+  assert.equal(ui.radarNotice(base), null);
+  // The single quiet pick has expired: only the expired line shows, not "no highlights" plus "no matching catches".
+  assert.match(ui.radarNotice({ ...base, quietPick: true, shown: gone, live: [] }), /has expired/);
+  assert.match(ui.radarNotice({ ...base, shown: [], live: [] }), /No matching catches/);
+  assert.match(ui.radarNotice({ ...base, quietPick: true }), /No highlights/);
+  // An old read outranks the quiet-pick note, and says how old it is.
+  assert.match(ui.radarNotice({ ...base, quietPick: true, ageSeconds: 63 * 60 }), /63 minutes old/);
+  assert.equal(ui.radarNotice({ ...base, busy: true }), null);
+  assert.equal(ui.radarNotice({ ...base, queriedAt: null }), null);
+  // A running watch keeps its own freshness, so the old-read line stays out of its way.
+  assert.equal(ui.radarNotice({ ...base, watching: true, ageSeconds: 63 * 60 }), null);
+});
+test('an old read is refreshed once when the pane is shown again, and a fresh or failed one is left alone', () => {
+  const now = Date.parse('2026-11-09T20:00:00Z');
+  const center = { lat: 34, lon: -84 };
+  assert.equal(ui.needsRefresh({ center, busy: false, queriedAt: '2026-11-09T18:57:00Z' }, now), true);
+  assert.equal(ui.needsRefresh({ center, busy: false, queriedAt: '2026-11-09T19:58:00Z' }, now), false);
+  assert.equal(ui.needsRefresh({ center, busy: true, queriedAt: '2026-11-09T18:57:00Z' }, now), false);
+  assert.equal(ui.needsRefresh({ center: null, busy: false, queriedAt: '2026-11-09T18:57:00Z' }, now), false);
+  assert.equal(ui.needsRefresh({ center, busy: false, queriedAt: null }, now), false);     // a read that failed has no time and cannot loop
+  assert.equal(ui.readAgeSeconds('not a date', now), null);
+  assert.equal(ui.ageLabel(60), '1 minute');
+  assert.equal(ui.ageLabel(63 * 60), '63 minutes');
+  assert.equal(ui.ageLabel(3 * 3600), '3 hours');
+});
