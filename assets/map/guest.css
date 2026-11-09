@@ -42,10 +42,12 @@ body { font: 13px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 .pin.is-new { animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .pin.is-selected img { scale: 1.3; }
-.pin.is-selected::after { content: ""; position: absolute; inset: -5px; border: 3px solid var(--amber); border-radius: 50%; box-shadow: 0 0 0 2px #122043; pointer-events: none; }
+.pin.is-selected::after { content: ""; position: absolute; inset: -5px; border: 3px solid var(--amber); border-radius: 50%; box-shadow: 0 0 0 2px #122043; pointer-events: none; z-index: 1; }
+/* The label (PvP #1, 100%, Nundo) stays readable on the selected catch: above the ring, and below its line. */
+.pin.is-selected .pin__tag { z-index: 3; bottom: -17px; }
 .pin.is-low::before { content: ""; position: absolute; inset: -2px; border: 2px solid var(--red); border-radius: 50%; animation: pulse 1.4s ease-in-out infinite; pointer-events: none; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-.pin__tag { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); padding: 1px 6px; border-radius: 999px; background: var(--amber); color: #0A1633; font: 800 10px/1.4 'Segoe UI', system-ui, sans-serif; white-space: nowrap; box-shadow: 0 0 0 1.5px #0A1633; }
+.pin__tag { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); padding: 1px 6px; border-radius: 999px; background: var(--amber); color: #0A1633; font: 800 10px/1.4 'Segoe UI', system-ui, sans-serif; white-space: nowrap; box-shadow: 0 0 0 1.5px #0A1633;  z-index: 2;}
 .pin__tag--pvp { background: #4ADE9A; }
 .pin__tag--nundo { background: #80A8FF; }
 
