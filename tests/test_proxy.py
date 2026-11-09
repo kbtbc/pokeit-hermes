@@ -242,6 +242,25 @@ class ProxyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             api.dispatch("map", {"document": "x"})
 
+    def test_forts_are_two_reads_trimmed_to_what_the_map_draws(self):
+        calls = []
+
+        def fake(method, params):
+            calls.append(params["name"])
+            if params["name"] == "find_gyms":
+                return {"results": [{"id": "g1.12", "lat": 34.0, "lon": -84.0, "name": "Fountain", "team": "valor", "active_raid": True, "map_url": "x"},
+                                    {"id": "g2.12", "lat": 34.0, "lon": -84.0, "team": "rocket"}, {"id": 7, "lat": 1, "lon": 1}], "truncated": False, "game_context": {"big": "x" * 5000}}
+            return {"results": [{"id": "s1.16", "lat": 34.1, "lon": -84.1, "name": "Mural", "lure": None, "rocket_incidents": [{"character": 4}]}, {"id": "s2", "lat": "x", "lon": 1}], "truncated": True}
+        with patch.object(api, "_fetch", side_effect=fake):
+            data, _ = api.dispatch("forts", {"lat": "34.0751", "lon": "-84.2941", "radius_m": "500"})
+        self.assertEqual(sorted(calls), ["find_gyms", "find_pokestops"])
+        self.assertEqual(data["gyms"], [{"id": "g1.12", "lat": 34.0, "lon": -84.0, "name": "Fountain", "team": "valor", "raid": True},
+                                        {"id": "g2.12", "lat": 34.0, "lon": -84.0, "name": "", "team": "neutral", "raid": False}])
+        self.assertEqual(data["stops"], [{"id": "s1.16", "lat": 34.1, "lon": -84.1, "name": "Mural", "lure": False, "rocket": True}])
+        self.assertTrue(data["truncated"])
+        with self.assertRaises(ValueError):
+            api.dispatch("forts", {"lat": "34", "lon": "-84", "limit": "500"})
+
     def test_transport_failure_returns_readable_json_and_is_not_cached(self):
         with patch.object(api, "_fetch", side_effect=api.ProxyError("unreachable","Try again.",True)) as fetch:
             first = self.request("/health")

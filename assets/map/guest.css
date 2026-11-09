@@ -17,7 +17,6 @@ body { font: 13px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 
 /* search radius: the radar rings, drawn on the real map */
 .ring { stroke: var(--amber); stroke-width: 2; stroke-dasharray: 6 8; fill: var(--amber); fill-opacity: 0.05; }
-.ring--inner { stroke-width: 1; stroke-opacity: 0.45; fill: none; }
 .ring-label { color: var(--amber); font: 700 11px/1 'Segoe UI', system-ui, sans-serif; text-shadow: 0 0 3px #050C20, 0 0 3px #050C20; white-space: nowrap; text-align: center; }
 :root.light .ring, :root.light .walk { stroke: #B15700; }
 :root.light .ring { fill: #B15700; }
@@ -50,10 +49,17 @@ body { font: 13px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 .pin__tag--pvp { background: #4ADE9A; }
 .pin__tag--nundo { background: #80A8FF; }
 
-/* everything else that was observed: small amber dots */
-.dot { width: 8px; height: 8px; margin: 4.5px; border-radius: 50%; background: var(--amber); border: 1.5px solid #0A1633; opacity: 0.8; cursor: pointer; transition: transform 0.12s ease; }
-.dot:hover, .dot.is-selected { transform: scale(1.5); opacity: 1; }
-.dot.is-selected { box-shadow: 0 0 0 3px var(--amber); }
+/* Pokestops and gyms: quiet landmarks, so a catch has something to stand next to */
+.fort { display: grid; place-items: center; }
+/* Leaflet sizes marker images itself (width: auto), so these two rules have to out-rank it. */
+.leaflet-container .leaflet-marker-pane .fort img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.leaflet-container .leaflet-marker-pane .pin img { width: 56px; height: 56px; }
+.fort--stop { width: 13px; height: 13px; opacity: 0.7; }
+.fort--gym { width: 24px; height: 24px; opacity: 0.95; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+.fort__shape { width: 60%; height: 60%; border-radius: 50%; background: #5BC8F5; border: 1px solid #0A1633; }
+.fort--gym .fort__shape { border-radius: 4px; background: #D8DCE8; }
+.fort--valor .fort__shape { background: #F0524B; } .fort--mystic .fort__shape { background: #4C8DF6; } .fort--instinct .fort__shape { background: #F7D038; }
+.fort--stop.is-active { opacity: 1; width: 17px; height: 17px; }
 
 /* map furniture in the PokeIt colours */
 .leaflet-container { background: var(--navy-raised); }

@@ -317,18 +317,36 @@ test('watch preferences are profile-scoped, never persist location or autostart,
   assert.equal(f.timers.at(-1).stopped, true);
 });
 
+// Values from the plugin's module realm are compared by content.
+const same = (a, b) => assert.equal(JSON.stringify(a), JSON.stringify(b));
 test('the map viewer is given only positions and labels, with expired and malformed rows left out', () => {
   const now = Date.now(), at = m => new Date(now + m * 60000).toISOString();
   const s = { center: { lat: 34.07, lon: -84.29 }, radius: 500, busy: false, selected: 'pid_a', label: 'City Hall',
-    observations: [{ observation_id: 'pid_a', lat: 34.071, lon: -84.291, name: 'Dratini', pokemon_id: 147, form: 0, iv_percent: 100, expires_at: at(10), expiry_verified: true, encounter_id: 'secret' },
+    observations: [{ observation_id: 'pid_a', lat: 34.071, lon: -84.291, name: 'Dratini', pokemon_id: 147, form: 46, iv_percent: 100, expires_at: at(10), expiry_verified: true, encounter_id: 'secret' },
       { observation_id: 'pid_gone', lat: 34.07, lon: -84.29, name: 'Gone', pokemon_id: 1, expires_at: at(-1), expiry_verified: true },
       { observation_id: '../bad', lat: 34.07, lon: -84.29 }, { observation_id: 'pid_nowhere', lat: 'x', lon: 1 }],
-    others: [{ observation_id: 'pid_b', lat: 34.072, lon: -84.292, name: 'Rattata', pokemon_id: 19, form: 46, iv_percent: 0 }] };
+    gyms: [{ id: 'abc123.12', lat: 34.072, lon: -84.292, name: 'Fountain', team: 'valor', raid: true, map_url: 'https://example.test' }, { id: 'bad id', lat: 1, lon: 1 }],
+    stops: [{ id: 'def456.16', lat: 34.073, lon: -84.293, name: 'Mural', lure: false, rocket: true }, { id: 'x', lat: null, lon: 1 }] };
   const state = ui.mapState(s, { light: true, watching: true, now });
-  assert.deepEqual(state.items.map(p => p.id), ['pid_a']); assert.deepEqual(state.dots.map(p => p.id), ['pid_b']);
-  assert.equal(state.items[0].tag, 'Hundo'); assert.equal(state.dots[0].tag, 'Nundo'); assert.equal(state.dots[0].form, 46);
-  assert.deepEqual(Object.keys(state.items[0]).sort(), ['expires', 'form', 'id', 'iv', 'lat', 'lon', 'name', 'pokemon_id', 'tag', 'verified']);
+  same(state.items.map(p => p.id), ['pid_a']);
+  assert.equal(state.items[0].tag, 'Hundo'); assert.equal(state.items[0].form, 46);
+  same(Object.keys(state.items[0]).sort(), ['expires', 'form', 'id', 'iv', 'lat', 'lon', 'name', 'pokemon_id', 'tag', 'verified']);
+  same(state.gyms, [{ id: 'abc123.12', lat: 34.072, lon: -84.292, name: 'Fountain', team: 'valor', raid: true }]);
+  same(state.stops, [{ id: 'def456.16', lat: 34.073, lon: -84.293, name: 'Mural', lure: false, rocket: true }]);
   assert.equal(state.theme, 'light'); assert.equal(state.watching, true); assert.equal(state.selected, 'pid_a');
   assert.equal(JSON.stringify(state).includes('City Hall'), false);
-  assert.equal(ui.mapState({ center: null, radius: 500, observations: [], others: undefined }).center, null);
+  assert.equal(ui.mapState({ center: null, radius: 500, observations: [], gyms: undefined, stops: undefined }).center, null);
+});
+
+test('a running watch keeps its matches for the map and marks only later arrivals as new', async () => {
+  let rows = [match('first')];
+  const f = watchHarness(async () => ({ observations: rows, truncated: false }));
+  f.watch.start('test', watchCenter, 'City Hall'); await flush();
+  same(f.watch.view.get().matches.map(p => p.observation_id), [rows[0].observation_id]);
+  same(f.watch.view.get().fresh, []); same(f.watch.view.get().center, watchCenter);
+  rows = [match('first'), match('second')];
+  await f.watch.poll(); await flush();
+  assert.equal(f.watch.view.get().matches.length, 2);
+  same(f.watch.view.get().fresh, [rows[1].observation_id]);
+  f.watch.stop(); same(f.watch.view.get().matches, []); assert.equal(f.watch.view.get().center, null); f.dispose();
 });

@@ -23,7 +23,7 @@ from fastapi import APIRouter, Request
 
 router = APIRouter()
 MCP_URL = "https://mcp.pokeit.cc/mcp"
-READ_TOOLS = frozenset({"find_pokemon", "find_raids", "get_coverage", "get_scan_status", "search_places"})
+READ_TOOLS = frozenset({"find_gyms", "find_pokemon", "find_pokestops", "find_raids", "get_coverage", "get_scan_status", "search_places"})
 MAX_BYTES = 2 * 1024 * 1024
 CACHE_SECONDS = 20
 MAX_CACHE_ITEMS = 128
@@ -331,6 +331,22 @@ def dispatch(route, params):
                 "query_center": point, "origin": origin, "queried_at": data.get("queried_at"),
                 "truncated": data.get("truncated", True),
                 "note": "Verified expiry has passed." if expired else "No longer in this read; absence alone does not prove despawn." if not row else None}, meta
+    if route == "forts":
+        # Gyms and Pokestops give the map its landmarks. Two reads of existing data, trimmed to what is drawn.
+        allowed(params, {"lat", "lon", "radius_m"})
+        args = {**point, "radius_m": number(params, "radius_m", 50, 2000, 500, True), "limit": 50}
+        gyms, meta = call_read("find_gyms", args)
+        stops, _ = call_read("find_pokestops", args)
+
+        def rows(data, extra):
+            out = []
+            for r in data.get("results", []) if isinstance(data.get("results"), list) else []:
+                if isinstance(r, dict) and isinstance(r.get("id"), str) and all(isinstance(r.get(k), (int, float)) for k in ("lat", "lon")):
+                    out.append({"id": r["id"][:80], "lat": r["lat"], "lon": r["lon"], "name": str(r.get("name") or "")[:80], **extra(r)})
+            return out
+        return {"gyms": rows(gyms, lambda r: {"team": r.get("team") if r.get("team") in ("valor", "mystic", "instinct") else "neutral", "raid": r.get("active_raid") is True}),
+                "stops": rows(stops, lambda r: {"lure": bool(r.get("lure")), "rocket": bool(r.get("rocket_incidents"))}),
+                "truncated": bool(gyms.get("truncated")) or bool(stops.get("truncated"))}, meta
     if route not in {"nearby", "raids"}:
         raise ValueError("Unknown read.")
     base = {"lat", "lon", "radius_m", "limit"}
@@ -402,6 +418,11 @@ def raids(request: Request):
 @router.get("/card")
 def card(request: Request):
     return respond("card", request)
+
+
+@router.get("/forts")
+def forts(request: Request):
+    return respond("forts", request)
 
 
 @router.get("/coverage")

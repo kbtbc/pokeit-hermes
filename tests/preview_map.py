@@ -3,7 +3,7 @@
   python tests/preview_map.py <output-directory> [lat lon [radius_m]]
 
 Writes index.html: the viewer inside a sandboxed frame, as the Desktop plugin shows it, with
-buttons to exercise selection, theme, watch and a new arrival. Serve the directory over http
+buttons to exercise selection, theme, watch and a new arrival (a real observation from the same read). Serve the directory over http
 and open it. Needs FastAPI (the Hermes venv has it). Reads only.
 """
 import importlib.util
@@ -43,11 +43,13 @@ def item(p):
 best, pick = rows("highlights")
 if not best and pick:
     best = [pick]
-everything, _ = rows("all")
+spare, _ = rows("all")
 shown = {p["observation_id"] for p in best}
+forts, _ = api.dispatch("forts", {"lat": str(lat), "lon": str(lon), "radius_m": str(radius)})
 state = {"theme": "dark", "center": {"lat": lat, "lon": lon}, "radius": radius, "busy": False, "watching": False,
          "selected": best[0]["observation_id"] if best else None, "items": [item(p) for p in best],
-         "dots": [item(p) for p in everything if p["observation_id"] not in shown][:50]}
+         "gyms": forts["gyms"], "stops": forts["stops"]}
+arrivals = [item(p) for p in spare if p["observation_id"] not in shown][:10]
 doc, _ = api.map_document()
 page = doc["document"].replace(doc["state_slot"], json.dumps(state).replace("<", "\\u003c"))
 host = """<!doctype html><meta charset="utf-8"><title>PokeIt map check</title>
@@ -61,17 +63,17 @@ host = """<!doctype html><meta charset="utf-8"><title>PokeIt map check</title>
 <script>
 const state = STATE, f = document.getElementById('f'); let i = 0;
 const send = () => f.contentWindow.postMessage({source:'pokeit-host', state}, '*');
-document.getElementById('count').textContent = state.items.length + ' catches, ' + state.dots.length + ' dots';
+const arrivals = ARRIVALS; document.getElementById('count').textContent = state.items.length + ' catches, ' + state.gyms.length + ' gyms, ' + state.stops.length + ' stops';
 addEventListener('message', e => { if (e.source !== f.contentWindow || e.data?.source !== 'pokeit-map') return;
   window.lastMessage = e.data; if (e.data.type === 'select') { state.selected = e.data.id; document.getElementById('picked').textContent = 'picked ' + e.data.id; } });
 theme.onclick = () => { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.style.background = state.theme === 'dark' ? '#050C20' : '#FBF8F1'; send(); };
 watch.onclick = () => { state.watching = !state.watching; send(); };
 busy.onclick = () => { state.busy = !state.busy; send(); };
 next.onclick = () => { i = (i + 1) % Math.max(1, state.items.length); state.selected = state.items[i]?.id || null; send(); };
-arrive.onclick = () => { const d = state.dots.shift(); if (d) { state.items = [...state.items, {...d, tag: 'Hundo', iv: 100}]; send(); } };
+arrive.onclick = () => { const d = arrivals.shift(); if (d) { state.items = [...state.items, d]; send(); } };
 </script>"""
 out.mkdir(parents=True, exist_ok=True)
 for name, width in (("index.html", 350), ("wide.html", 760)):
-    (out / name).write_text(host.replace("WIDTH", str(width)).replace("SRC", "data:text/html;charset=utf-8," + quote(page, safe="")).replace("STATE", json.dumps(state)), encoding="utf-8")
-print(f"{len(state['items'])} catches, {len(state['dots'])} dots, document {len(page)} bytes -> {out}")
+    (out / name).write_text(host.replace("WIDTH", str(width)).replace("SRC", "data:text/html;charset=utf-8," + quote(page, safe="")).replace("STATE", json.dumps(state)).replace("ARRIVALS", json.dumps(arrivals)), encoding="utf-8")
+print(f"{len(state['items'])} catches, {len(state['gyms'])} gyms, {len(state['stops'])} stops, document {len(page)} bytes -> {out}")
 (out / "guest.html").write_text(page, encoding="utf-8")  # the viewer page on its own, for inspection

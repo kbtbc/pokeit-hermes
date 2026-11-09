@@ -1,9 +1,9 @@
 /* PokeIt map guest. Runs only inside the Desktop plugin's sandboxed, opaque-origin frame.
  *
  * It draws what the plugin already read: the search point, its radius, the returned
- * catches as large icons and other observations as small dots. It never reads PokeIt
+ * catches as large icons, and nearby Pokestops and gyms as landmarks. It never reads PokeIt
  * data itself and cannot start a search or a scan. The only things it loads from the
- * network are map tiles and species icons, both listed in the document's CSP.
+ * network are map tiles and PokeIt's own icons, both listed in the document's CSP.
  *
  * In:  the first state is embedded in the document; later states arrive from the
  *      plugin as window messages ({source: 'pokeit-host', state}).
@@ -15,6 +15,7 @@
   'use strict';
   var ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
   var ICONS = 'https://pokeit.cc/assets/bigfunOutline/pokemon/';
+  var FORT = /^[A-Za-z0-9._-]{1,80}$/, TEAMS = { neutral: 0, mystic: 1, valor: 2, instinct: 3 };
   var root = document.documentElement, note = document.getElementById('note');
   var num = function (n) { return typeof n === 'number' && isFinite(n); };
   var str = function (s, n) { return typeof s === 'string' ? s.slice(0, n || 80) : ''; };
@@ -29,8 +30,8 @@
   setTimeout(function () { if (!loaded) { note.dataset.kind = 'tiles'; note.textContent = 'Map tiles unavailable. Catches are still placed correctly.'; } }, 12000);
 
   var state = null, placeKey = '', listSig = '', markers = new Map(), known = new Set();
-  var spot = null, ring = null, inner = null, label = null, sweep = null, walk = null, userMoved = false;
-  var layer = L.layerGroup().addTo(map);
+  var spot = null, ring = null, label = null, fortSig = '', sweep = null, walk = null, userMoved = false;
+  var fortLayer = L.layerGroup().addTo(map), layer = L.layerGroup().addTo(map);
 
   function ringBounds() { return L.latLng(state.center.lat, state.center.lon).toBounds(state.radius * 2); }
   function fit() { if (state && state.center) { userMoved = false; map.fitBounds(ringBounds(), { padding: [14, 14], animate: false }); } }
@@ -57,12 +58,11 @@
   map.on('zoomend', drawSweep);
 
   function place() {
-    [spot, ring, inner, label].forEach(function (l) { if (l) { layer.removeLayer(l); } });
-    spot = ring = inner = label = null;
+    [spot, ring, label].forEach(function (l) { if (l) { layer.removeLayer(l); } });
+    spot = ring = label = null;
     if (!state.center) { return; }
     var at = [state.center.lat, state.center.lon];
     ring = L.circle(at, { radius: state.radius, className: 'ring', interactive: false }).addTo(layer);
-    inner = L.circle(at, { radius: state.radius / 2, className: 'ring ring--inner', interactive: false }).addTo(layer);
     spot = L.marker(at, { interactive: false, keyboard: false, zIndexOffset: -100,
       icon: L.divIcon({ className: 'find-marker', html: '<span class="find-marker__ring"></span><span class="find-marker__dot"></span>', iconSize: [28, 28], iconAnchor: [14, 14] }) }).addTo(layer);
     var north = L.latLng(at).toBounds(state.radius * 2).getNorth();
@@ -72,6 +72,28 @@
     fit(); drawSweep();
   }
 
+  function drawForts(gyms, stops) {
+    var ok = function (list) { return (Array.isArray(list) ? list : []).filter(function (f) {
+      return f && FORT.test(f.id) && num(f.lat) && num(f.lon) && Math.abs(f.lat) <= 85 && Math.abs(f.lon) <= 180; }).slice(0, 60); };
+    gyms = ok(gyms); stops = ok(stops);
+    var sig = JSON.stringify([gyms, stops]);
+    if (sig === fortSig) { return; }
+    fortSig = sig; fortLayer.clearLayers();
+    var add = function (f, gym) {
+      var active = f.raid === true || f.lure === true;
+      var el = document.createElement('div'), img = document.createElement('img'), size = gym ? 24 : active ? 17 : 13;
+      el.className = 'fort fort--' + (gym ? 'gym fort--' + (TEAMS[f.team] === undefined ? 'neutral' : f.team) : 'stop') + (active ? ' is-active' : '');
+      img.alt = ''; img.draggable = false;
+      img.src = gym ? 'https://pokeit.cc/assets/pogoOutline/gym/' + (TEAMS[f.team] || 0) + '.png?w=64' : 'https://pokeit.cc/assets/shuffle/pokestop/0.png?w=64';
+      img.addEventListener('error', function () { var shape = document.createElement('span'); shape.className = 'fort__shape'; if (img.parentNode) { img.parentNode.replaceChild(shape, img); } });
+      el.appendChild(img);
+      var note = f.raid === true ? ' · raid' : f.lure === true ? ' · lure' : f.rocket === true ? ' · Team GO Rocket' : '';
+      L.marker([f.lat, f.lon], { keyboard: false, zIndexOffset: gym ? -300 : -400,
+        icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }) })
+        .bindTooltip((gym ? 'Gym: ' : 'Pokestop: ') + (str(f.name, 60) || 'unnamed') + note, { direction: 'top', offset: [0, -size / 2] }).addTo(fortLayer);
+    };
+    stops.forEach(function (f) { add(f, false); }); gyms.forEach(function (f) { add(f, true); });
+  }
   function art(p) {
     var img = document.createElement('img'), tried = 0;
     img.alt = ''; img.draggable = false; img.decoding = 'async';
@@ -88,7 +110,7 @@
   function choose(id) { parent.postMessage({ source: 'pokeit-map', type: 'select', id: id }, '*'); select(id); }
   function addMarker(p, big) {
     var el = document.createElement('div');
-    if (big) {
+    {
       el.className = 'pin' + (known.size && !known.has(p.id) ? ' is-new' : '');
       el.appendChild(art(p));
       if (p.tag) {
@@ -96,7 +118,7 @@
         tag.className = 'pin__tag' + (p.tag === 'PvP #1' ? ' pin__tag--pvp' : p.tag === 'Nundo' ? ' pin__tag--nundo' : '');
         tag.textContent = p.tag === 'Hundo' ? '100%' : p.tag; el.appendChild(tag);
       }
-    } else { el.className = 'dot'; }
+    }
     var title = str(p.name, 40) + (num(p.iv) ? ' · ' + Math.round(p.iv * 10) / 10 + '% IV' : '');
     var m = L.marker([p.lat, p.lon], { title: '', alt: title, zIndexOffset: big ? 200 : 0,
       icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: big ? [52, 52] : [19, 19], iconAnchor: big ? [26, 26] : [9.5, 9.5] }) });
@@ -141,15 +163,15 @@
     root.classList.toggle('is-watching', next.watching === true);
     var key = center ? [center.lat, center.lon, state.radius].join(',') : '';
     if (key !== placeKey) { placeKey = key; known = new Set(); place(); }
-    var items = clean(next.items), dots = clean(next.dots);
+    drawForts(next.gyms, next.stops);
+    var items = clean(next.items);
     // Redraw the catches only when the list changed, so a selection does not make icons blink.
-    var sig = JSON.stringify([key, items.map(function (p) { return [p.id, p.tag, p.expires]; }), dots.map(function (p) { return p.id; })]);
+    var sig = JSON.stringify([key, items.map(function (p) { return [p.id, p.tag, p.expires]; })]);
     if (sig === listSig) { select(state.selected); return; }
     listSig = sig;
     markers.forEach(function (m) { layer.removeLayer(m.marker); });
     markers = new Map();
-    dots.forEach(function (p) { if (!markers.has(p.id)) { addMarker(p, false); } });
-    items.forEach(function (p) { if (markers.has(p.id)) { layer.removeLayer(markers.get(p.id).marker); } addMarker(p, true); });
+    items.forEach(function (p) { if (!markers.has(p.id)) { addMarker(p, true); } });
     if (next.busy !== true) { items.forEach(function (p) { known.add(p.id); }); }
     select(state.selected); tick();
   }

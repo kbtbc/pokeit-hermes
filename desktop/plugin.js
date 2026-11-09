@@ -1,6 +1,6 @@
 import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STATUSBAR_AREAS, TRANSCRIPT_DIRECTIVE_AREA } from '@hermes/plugin-sdk';
 import * as sdk from '@hermes/plugin-sdk';
-import { useEffect, useMemo, useRef, useState, useId } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
 const VERSION = '0.1.17';
@@ -12,9 +12,9 @@ const ICON = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
 const Frame = sdk.SandboxedFrame || null;
 const TERMINAL = new Set(['data_refreshed', 'existing_coverage', 'partial_unverified', 'failed']);
 const RADII = [100, 250, 500, 1000, 2000];
-const EXAMPLES = [['Alpharetta City Hall', 'Alpharetta City Hall, Georgia'], ['Bethesda Terrace, NYC', 'Bethesda Terrace, Central Park, New York'],
-  ['Pike Place Market', 'Pike Place Market, Seattle']];
-const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], others: [], selected: null,
+const EXAMPLES = ['Alpharetta City Hall, Georgia', 'Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
+const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
+const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0 });
 const text = (s, n = 180) => typeof s === 'string' ? s.slice(0, n) : '';
 const number = n => typeof n === 'number' && Number.isFinite(n);
@@ -193,14 +193,14 @@ export function watchMatches(p, config, now) {
 }
 export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
   const saved = () => watchPrefs(ctx.storage?.get('watch-preferences:' + watchScope(), null));
-  const view = atom({ ...saved(), active: false, busy: false, error: '', lastChecked: null, matched: 0, truncated: false, label: '', notice: '', notificationNote: '' });
+  const view = atom({ ...saved(), active: false, busy: false, error: '', lastChecked: null, matched: 0, matches: [], fresh: [], center: null, truncated: false, label: '', notice: '', notificationNote: '' });
   let current = null, alive = true, cancelTimer = null, clearBubble = null;
   const alerts = new Map();
   const patch = changes => view.set({ ...view.get(), ...changes });
   const valid = run => alive && current === run && run.scope === watchScope() && run.epoch === gatewayActivationEpoch();
   function stop(notice = 'Watch stopped.') {
     current = null; cancelTimer?.(); cancelTimer = null; clearBubble?.(); clearBubble = null;
-    patch({ active: false, busy: false, notice });
+    patch({ active: false, busy: false, notice, matches: [], fresh: [], center: null });
   }
   function configure(value) {
     if (current) return;
@@ -217,7 +217,10 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
       const matches = [...new Map((Array.isArray(data.observations) ? data.observations : [])
         .filter(p => watchMatches(p, run, now())).map(p => [p.observation_id, p])).values()].slice(0, 50);
       const fresh = matches.filter(p => !run.seen.has(p.observation_id));
-      patch({ busy: false, error: '', lastChecked: now(), matched: matches.length, truncated: !!data.truncated,
+      // The map shows every match; the ones that were not in the previous read are marked new.
+      const arrived = run.shown ? matches.filter(p => !run.shown.has(p.observation_id)).map(p => p.observation_id) : [];
+      run.shown = new Set(matches.map(p => p.observation_id));
+      patch({ busy: false, error: '', lastChecked: now(), matched: matches.length, matches, fresh: arrived, truncated: !!data.truncated,
         notice: matches.length ? `${matches.length} matching ${matches.length === 1 ? 'catch' : 'catches'} in the latest read.` : 'No matching catches in the latest read.' });
       const alertKey = run.scope + ':' + run.kind;
       if (!fresh.length || now() - (alerts.get(alertKey) ?? -Infinity) < 120000) return;
@@ -247,7 +250,7 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
     stop('');
     current = { ...watchPrefs(view.get()), sid, center: { ...center }, label: text(label, 80) || 'this spot',
       scope: watchScope(), epoch: gatewayActivationEpoch(), seen: new Set() };
-    patch({ active: true, busy: false, error: '', lastChecked: null, matched: 0, truncated: false, label: current.label, notice: 'Checking this spot…', notificationNote: '' });
+    patch({ active: true, busy: false, error: '', lastChecked: null, matched: 0, matches: [], fresh: [], center: { ...center }, truncated: false, label: current.label, notice: 'Checking this spot…', notificationNote: '' });
     cancelTimer = ctx.setInterval(() => { void poll(); }, 60000);
     void poll(); return true;
   }
@@ -314,38 +317,46 @@ export function createController(ctx) {
     return v && number(v.lat) && number(v.lon) && Math.abs(v.lat) <= 85 && Math.abs(v.lon) <= 180 && typeof v.label === 'string' && RADII.includes(v.radius)
       ? { center: { lat: v.lat, lon: v.lon }, label: text(v.label, 100), radius: v.radius } : null;
   }
+  // Pokestops and gyms are the map's landmarks. A read of existing data; a failure only leaves the map plainer.
+  async function loadForts(sid, center, radius, generation) {
+    if (mapShell === null) return;
+    try {
+      const d = await api('/forts?' + new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius }), true);
+      if (!alive || state(sid).generation !== generation) return;
+      const rows = list => (Array.isArray(list) ? list : []).filter(f => FORT_ID.test(f?.id || '') && number(f.lat) && number(f.lon)).slice(0, 50);
+      update(sid, { gyms: rows(d.gyms), stops: rows(d.stops) });
+    } catch { /* decoration only */ }
+  }
   async function read(sid, center, label, radius) {
     const s = state(sid), generation = s.generation + 1;
-    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], others: [], selected: null, queriedAt: null, coverage: null });
+    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null });
     try {
       const params = new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50, selection: 'highlights' });
-      // The map also shows everything else that was observed, as small dots. A read only; it never starts a scan.
-      const everything = mapShell === null ? Promise.resolve(null)
-        : api('/nearby?' + new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50, selection: 'all' }), true).catch(() => null);
-      const [result, coverage, all] = await Promise.all([api('/nearby?' + params),
-        api('/coverage?' + new URLSearchParams(center)).catch(() => null), everything]);
+      void loadForts(sid, center, radius, generation);
+      const [result, coverage] = await Promise.all([api('/nearby?' + params),
+        api('/coverage?' + new URLSearchParams(center)).catch(() => null)]);
       if (!alive || state(sid).generation !== generation) return;
       const observations = (Array.isArray(result.observations) ? result.observations : []).slice(0, 50);
       if (!observations.length && result.highest_observed_iv) observations.push(result.highest_observed_iv);
-      const shown = new Set(observations.map(p => p.observation_id));
-      const others = (Array.isArray(all?.observations) ? all.observations : []).filter(p => ID.test(p?.observation_id || '') && !shown.has(p.observation_id)).slice(0, 50);
-      update(sid, { observations, others, coverage, queriedAt: result.queried_at, truncated: !!result.truncated,
+      update(sid, { observations, coverage, queriedAt: result.queried_at, truncated: !!result.truncated,
         candidates: result.observed_candidates_in_radius, quietPick: !result.observations?.length && !!result.highest_observed_iv,
         busy: false, selected: observations[0]?.observation_id || null });
       ctx.storage?.set('last-spot:' + watchScope(), { lat: center.lat, lon: center.lon, label: text(label, 100), radius });
     } catch (e) { if (alive && state(sid).generation === generation) update(sid, { busy: false, error: e.message }); }
   }
-  function adopt(sid, observation, origin, place) {
+  function adopt(sid, observation, origin, place, pick = true) {
     const s = state(sid), far = s.center && distanceBearing(s.center, observation)?.meters > s.radius;
     const center = origin || (!far && s.center) || { lat: observation.lat, lon: observation.lon };
     const moved = !s.center || distanceBearing(s.center, center)?.meters > 5;
     // A late refresh from the previous point must not undo this explicit selection.
     update(sid, { generation: s.generation + 1, busy: false, error: '' });
-    if (moved) update(sid, { center, others: [], label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
+    if (moved) update(sid, { center, gyms: [], stops: [], label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
     const targetDistance = distanceBearing(center, observation)?.meters || 0;
     if (targetDistance > s.radius) update(sid, { radius: [250, 500, 1000, 2000].find(n => n >= targetDistance) || 2000 });
     const list = moved ? [] : s.observations.filter(p => p.observation_id !== observation.observation_id);
-    update(sid, { observations: [observation, ...list].slice(0, 50), selected: observation.observation_id });
+    const keep = !pick && !moved && s.observations.some(p => p.observation_id === s.selected);
+    update(sid, { observations: (keep ? [...list, observation] : [observation, ...list]).slice(0, 50), selected: keep ? s.selected : observation.observation_id });
+    if (moved) void loadForts(sid, center, state(sid).radius, state(sid).generation);
   }
   function reset() { sessions.clear(); icons.clear(); iconQueue.length = 0; if (Frame) { mapShell = undefined; mapAsked = false; } revision.set(revision.get() + 1); healthy = null; }
   ctx.setInterval(() => clock.set(Date.now()), 1000);
@@ -369,8 +380,12 @@ async function draft(textValue, sid = null) {
   const ok = await host.composer.insertText(sid, textValue, { mode: 'block' });
   if (!ok) host.notify({ kind: 'warning', message: 'Open this chat to add the question.' });
 }
-function openRadar(ctrl, sid) {
-  host.openWorkspace('pokeit:radar', { title: 'PokeIt Radar', minWidth: 320, render: () => h(RadarPane, { ctrl, sessionId: sid }) });
+// The map docks beside the chat. Once the player closes it, answers stop reopening it until they ask for it again.
+let closedByPlayer = false;
+function openRadar(ctrl, sid, byPlayer = true) {
+  if (byPlayer) closedByPlayer = false; else if (closedByPlayer) return;
+  host.openWorkspace('pokeit:radar', { title: 'PokeIt Radar', minWidth: '22rem', dock: { pane: 'workspace', pos: 'right' },
+    render: () => h(RadarPane, { ctrl, sessionId: sid }), onClose: () => { closedByPlayer = true; } });
 }
 export function showInRadar(ctrl, sid, observation, center, place) {
   ctrl.adopt(sid, observation, center, place);
@@ -491,7 +506,7 @@ function CatchSummary({ ctrl, c, p, center, sid, place, inPane = false }) {
       !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: 8 }, children: rank }),
       !gone && hs('div', { style: { ...rowStyle, marginTop: 14 }, children: [
         h(Button, { c, primary: true, style: { padding: '10px 16px', fontSize: 13 }, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
-        !inPane && h(Button, { c, style: { padding: '10px 16px', fontSize: 13 }, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show in Radar' })
+        !inPane && h(Button, { c, style: { padding: '10px 16px', fontSize: 13 }, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show on map' })
       ] })
     ] }),
     !inPane && h(Compass, { c, d, place, timer, verified })
@@ -556,15 +571,18 @@ export function mapState(s, { light = false, watching = false, now = Date.now() 
       expires: Number.isFinite(end) ? end : null, verified: p.expiry_verified === true };
   };
   const live = list => (Array.isArray(list) ? list : []).filter(p => ID.test(p?.observation_id || '') && number(p.lat) && number(p.lon) && !expiry(p, now).expired);
+  const forts = list => (Array.isArray(list) ? list : []).filter(f => FORT_ID.test(f?.id || '') && number(f.lat) && number(f.lon)).slice(0, 50);
+  const fort = (f, extra) => ({ id: f.id, lat: f.lat, lon: f.lon, name: text(f.name, 60), ...extra });
   return { theme: light ? 'light' : 'dark', center: s.center ? { lat: s.center.lat, lon: s.center.lon } : null, radius: s.radius,
-    busy: !!s.busy, watching: !!watching, selected: s.selected || null, items: live(s.observations).map(row), dots: live(s.others).map(row) };
+    busy: !!s.busy, watching: !!watching, selected: s.selected || null, items: live(s.observations).map(row),
+    gyms: forts(s.gyms).map(f => fort(f, { team: text(f.team, 10), raid: f.raid === true })),
+    stops: forts(s.stops).map(f => fort(f, { lure: f.lure === true, rocket: f.rocket === true })) };
 }
 // A real map in place of the drawn radar: this plugin's own viewer page inside the SDK's sandboxed frame.
 // The page cannot read PokeIt, start a search or reach the app; a tap on a catch only changes the selection here.
-function MapView({ ctrl, c, s, sid }) {
-  const shell = ctrl.mapDocument(), light = useTheme().resolvedMode === 'light', watch = useValue(ctrl.watch.view);
+function MapView({ ctrl, c, s, sid, watching = false }) {
+  const shell = ctrl.mapDocument(), light = useTheme().resolvedMode === 'light';
   const frame = useRef(null), latest = useRef(null);
-  const watching = watch.active && !!s.center;
   const payload = mapState(s, { light, watching }), wire = JSON.stringify(payload);
   latest.current = { payload, wire, s };
   // A new search point rebuilds the page with that state inside it; everything after travels as messages.
@@ -578,7 +596,7 @@ function MapView({ ctrl, c, s, sid }) {
       if (!frame.current || e.source !== frame.current.contentWindow || e.data?.source !== 'pokeit-map') return;
       if (e.data.type === 'ready') send();
       const now = latest.current.s, id = e.data.id;
-      if (e.data.type === 'select' && typeof id === 'string' && ID.test(id) && [...now.observations, ...now.others].some(p => p.observation_id === id)) ctrl.update(sid, { selected: id });
+      if (e.data.type === 'select' && typeof id === 'string' && ID.test(id) && now.observations.some(p => p.observation_id === id)) ctrl.update(sid, { selected: id });
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -586,11 +604,11 @@ function MapView({ ctrl, c, s, sid }) {
   if (!shell || !src) return shell === undefined
     ? h('div', { className: 'pokeit-pulse', style: { height: 340, borderRadius: 12, background: c.bg, border: `1px solid ${c.line}` } })
     : h(RadarSvg, { ctrl, c, s, sid });
-  return h('div', { style: { height: 'clamp(300px, 46vh, 460px)', borderRadius: 12, overflow: 'hidden', border: `1px solid ${c.line}`, background: c.bg },
+  return h('div', { style: { height: 'clamp(320px, 52vh, 560px)', borderRadius: 12, overflow: 'hidden', border: `1px solid ${c.line}`, background: c.bg },
     children: h(Frame, { ref: frame, src, sandbox: 'allow-scripts', title: `Map of catches near ${named(s.label) || 'the search point'}`,
       style: { width: '100%', height: '100%', border: 0, display: 'block' } }) });
 }
-function ResultRow({ ctrl, c, p, center, selected, now, onSelect }) {
+function ResultRow({ ctrl, c, p, center, selected, now, onSelect, isNew = false }) {
   const timer = expiry(p, now), d = distanceBearing(center, p), hl = highlight(p, c);
   return hs('button', { type: 'button', 'aria-pressed': selected, onClick: onSelect, style: { display: 'grid', gridTemplateColumns: '40px 1fr auto', alignItems: 'center', gap: 10,
     width: '100%', textAlign: 'left', color: c.fg, font: `13px ${font}`, background: selected ? c.raised : 'transparent',
@@ -598,91 +616,66 @@ function ResultRow({ ctrl, c, p, center, selected, now, onSelect }) {
     h(Mon, { ctrl, c, p, size: 40 }),
     hs('span', { style: { minWidth: 0 }, children: [
       h('strong', { style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: text(p.name, 60) || 'Pokémon' }),
-      h('span', { style: fine(c), children: [metric(p), hl?.label, d && `${amount(d.meters)} ${d.direction}`].filter(Boolean).join(' · ') })
+      hs('span', { style: fine(c), children: [isNew && h('b', { style: { color: c.accent }, children: 'New · ' }), [metric(p), hl?.label, d && `${amount(d.meters)} ${d.direction}`].filter(Boolean).join(' · ')] })
     ] }),
     h('span', { style: { fontVariantNumeric: 'tabular-nums', fontSize: 12, color: timer.low ? c.red : c.muted }, children: timer.seconds > 0 ? timer.label : '' })
   ] });
 }
 function RadarPane({ ctrl, sessionId }) {
-  const c = useColors(), active = useActiveSession(), sid = sessionId || active, fieldId = useId();
-  const s = useRadar(ctrl, sid), now = useValue(ctrl.clock);
-  const [query, setQuery] = useState(''), [places, setPlaces] = useState([]), [finding, setFinding] = useState(false), [placeError, setPlaceError] = useState('');
-  const live = s.observations.filter(p => !expiry(p, now).expired);
-  const selected = s.observations.find(p => p.observation_id === s.selected) || s.others.find(p => p.observation_id === s.selected), place = named(s.label);
+  const c = useColors(), active = useActiveSession(), sid = sessionId || active;
+  const s = useRadar(ctrl, sid), now = useValue(ctrl.clock), w = useValue(ctrl.watch.view);
+  // While Hunt Watch runs on this spot, its matches join the map and the list; the ones new in the latest read are marked.
+  const watching = !!(w.active && s.center && w.center && distanceBearing(s.center, w.center)?.meters < 5);
+  const known = new Set(s.observations.map(p => p.observation_id));
+  const shown = watching ? [...s.observations, ...w.matches.filter(p => !known.has(p.observation_id))] : s.observations;
+  const view = watching ? { ...s, observations: shown } : s, fresh = new Set(watching ? w.fresh : []);
+  const live = shown.filter(p => !expiry(p, now).expired).sort((a, b) => fresh.has(b.observation_id) - fresh.has(a.observation_id));
+  const selected = shown.find(p => p.observation_id === s.selected), place = named(s.label);
   const last = !s.center && !s.busy ? ctrl.lastSpot() : null;
-  useEffect(() => { setPlaces([]); setPlaceError(''); setQuery(''); }, [sid]);
-  async function lookup(q) {
-    if (!q || finding) return;
-    const fromSession = sid, fromConnection = gatewayActivationEpoch();
-    setFinding(true); setPlaceError(''); setPlaces([]);
-    try {
-      const result = await ctrl.api('/place?' + new URLSearchParams({ query: q, limit: 5 }));
-      if ((!sessionId && fromSession !== activeSession()) || fromConnection !== gatewayActivationEpoch()) return;
-      const rows = Array.isArray(result.results) ? result.results : Array.isArray(result.places) ? result.places : [];
-      if (!rows.length) setPlaceError('No match yet. Try an address, intersection or landmark and city.');
-      else if (rows.length === 1) choose(rows[0]);
-      else setPlaces(rows);
-    } catch (e) { if (sessionId || fromSession === activeSession()) setPlaceError(e.message); } finally { setFinding(false); }
-  }
-  function choose(p) {
-    if (p.requires_specific_location || !number(p.lat) || !number(p.lon)) { setPlaces([p]); setPlaceError('Choose a nearby entrance, address or landmark so this scan covers a useful spot.'); return; }
-    setPlaces([]); setPlaceError(''); void ctrl.read(sid, { lat: p.lat, lon: p.lon }, text(p.choice_label || p.label || p.name, 100), s.radius);
-  }
   const status = s.coverage?.scan_plan?.status;
   const age = s.queriedAt ? Math.max(0, Math.floor((now - Date.parse(s.queriedAt)) / 1000)) : null;
-  const chip = (label, run) => h(Button, { c, disabled: finding || s.busy, onClick: run, children: label }, label);
+  const next = watching && w.lastChecked ? Math.max(0, 60 - Math.floor((now - w.lastChecked) / 1000)) : null;
+  const landmarks = [s.gyms.length && `${s.gyms.length} ${s.gyms.length === 1 ? 'gym' : 'gyms'}`, s.stops.length && `${s.stops.length} Pokéstops`].filter(Boolean).join(' · ');
   return hs('section', { 'aria-label': 'PokeIt Radar', style: { background: c.surface, color: c.fg, padding: 14, overflowY: 'auto', height: '100%', fontFamily: font, boxSizing: 'border-box' }, children: [
     h(Styles, {}),
     hs('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }, children: [
-      hs('div', { children: [hs('h2', { style: { fontSize: 19, fontWeight: 800, margin: 0 }, children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), ' Radar'] }),
-        h('p', { style: { ...fine(c), margin: '4px 0 0' }, children: s.label })] }),
-      h(Button, { c, disabled: !s.center || s.busy, onClick: () => void ctrl.read(sid, s.center, s.label, s.radius), children: s.busy ? 'Reading…' : 'Refresh' })
-    ] }),
-    hs('form', { onSubmit: e => { e.preventDefault(); void lookup(query.trim()); }, style: { marginTop: 14 }, children: [
-      h('label', { htmlFor: fieldId, style: { ...fine(c), display: 'block', marginBottom: 5 }, children: 'Pick a precise spot' }),
-      hs('div', { style: { display: 'flex', gap: 6 }, children: [
-        h('input', { id: fieldId, value: query, maxLength: 160, onChange: e => setQuery(e.target.value), placeholder: 'Landmark and city',
-          style: { background: c.bg, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: '8px 9px', minWidth: 0, width: '100%', font: `13px ${font}` } }),
-        h('button', { type: 'submit', disabled: finding, style: { color: c.ink, background: c.accent, border: 0, borderRadius: 8, padding: '0 12px', fontWeight: 700, cursor: 'pointer' }, children: finding ? '…' : 'Find' })
-      ] }),
-      h(ErrorNote, { c, message: placeError }),
-      ...places.map((p, i) => h(Button, { c, style: { width: '100%', marginTop: 6, textAlign: 'left' }, onClick: () => choose(p), children: text(p.choice_label || p.label || p.name, 160) || 'Unnamed location' }, i))
+      hs('div', { style: { minWidth: 0 }, children: [hs('h2', { style: { fontSize: 19, fontWeight: 800, margin: 0 }, children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), ' Radar'] }),
+        h('p', { style: { ...fine(c), margin: '4px 0 0' }, children: s.center ? s.label : 'Follows your chat' })] }),
+      s.center && h(Button, { c, disabled: s.busy, onClick: () => void ctrl.read(sid, s.center, s.label, s.radius), children: s.busy ? 'Reading…' : 'Refresh' })
     ] }),
     h(ErrorNote, { c, message: s.error }),
     !s.center ? hs('div', { style: { textAlign: 'center', marginTop: 8 }, children: [
       h(RadarSvg, { ctrl, c, s, sid, ghost: true }),
-      h('p', { style: { margin: '6px 0 4px', fontSize: 15, fontWeight: 650 }, children: 'Pick a spot to see what is worth catching.' }),
-      h('p', { style: fine(c), children: 'Search above, or try an example. Reading only; no scan starts here.' }),
-      hs('div', { style: { ...rowStyle, justifyContent: 'center', marginTop: 6 }, children: [
-        last && chip(`Resume ${last.label}`, () => void ctrl.read(sid, last.center, last.label, last.radius)),
-        ...EXAMPLES.map(([label, search]) => chip(label, () => { setQuery(search); void lookup(search); }))
+      h('p', { style: { margin: '6px 0 4px', fontSize: 15, fontWeight: 650 }, children: 'Ask Hermes about a place.' }),
+      h('p', { style: fine(c), children: 'The map opens beside the answer and follows it. Try one of these in chat:' }),
+      hs('div', { style: { display: 'grid', gap: 6, marginTop: 8 }, children: [
+        ...EXAMPLES.map(spot => h(Button, { c, style: { textAlign: 'left' }, onClick: () => void draft(`What's worth catching near ${spot}?`, sid), children: `What's worth catching near ${spot}?` }, spot)),
+        last && h(Button, { c, style: { textAlign: 'left' }, disabled: s.busy, onClick: () => void ctrl.read(sid, last.center, last.label, last.radius), children: `Back to ${last.label}` })
       ] })
     ] }) : hs('div', { children: [
-      hs('div', { style: { ...rowStyle, marginTop: 10, justifyContent: 'space-between' }, children: [
-        hs('label', { style: fine(c), children: ['Radius ', h('select', { 'aria-label': 'Radar radius', value: s.radius, onChange: e => void ctrl.read(sid, s.center, s.label, Number(e.target.value)),
-          style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: 5 }, children: RADII.map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) })] }),
-        h('span', { style: fine(c), children: 'North up · read only' })
-      ] }),
       status === 'needs_scan' && hs('div', { style: { ...panel(c), marginTop: 10, padding: 10 }, children: [
         h('p', { style: { ...fine(c), margin: '0 0 6px' }, children: 'No recent scan here. These are existing observations.' }),
         h(Button, { c, onClick: () => void draft(`Check ${s.label} and scan if needed. Use this selected map pin: ${mapUrl(s.center, s.radius)}`, sid), children: 'Ask Hermes to scan' })
       ] }),
       status === 'in_progress' && h('p', { style: fine(c), children: 'A scan is in progress here. Refresh after it finishes.' }),
-      s.queriedAt && !s.coverage && h('p', { style: fine(c), children: 'Coverage freshness could not be checked. These are existing observations.' }),
       hs('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start', marginTop: 12 }, children: [
         hs('div', { children: [
-          h(MapView, { ctrl, c, s, sid }),
+          h(MapView, { ctrl, c, s: view, sid, watching }),
           hs('div', { style: { ...rowStyle, justifyContent: 'space-between', marginTop: 8, ...fine(c) }, children: [
-            h('span', { children: `${live.length} shown${s.others.length ? ` · ${s.others.length} more as dots` : ''}${s.truncated ? ' · limited sample' : ''}` }),
-            h('span', { children: age === null ? '' : `Read ${age < 60 ? age + 's' : Math.floor(age / 60) + 'm'} ago` })
-          ] })
+            h('span', { children: [`${live.length} ${live.length === 1 ? 'catch' : 'catches'}`, landmarks].filter(Boolean).join(' · ') + (s.truncated ? ' · limited sample' : '') }),
+            h('span', { style: { fontVariantNumeric: 'tabular-nums', color: watching ? c.accent : c.muted }, children: next !== null ? (w.busy ? 'Reading…' : `Live · next read in ${next}s`) : age === null ? '' : `Read ${age < 60 ? age + 's' : Math.floor(age / 60) + 'm'} ago` })
+          ] }),
+          hs('label', { style: { ...fine(c), display: 'block', marginTop: 6 }, children: ['Ring ', h('select', { 'aria-label': 'Search radius', value: s.radius, disabled: s.busy || watching, onChange: e => void ctrl.read(sid, s.center, s.label, Number(e.target.value)),
+            style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: '3px 5px', font: `12px ${font}` }, children: RADII.map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) }),
+            ' around the search point']
+          })
         ] }),
         hs('div', { style: { minWidth: 0 }, children: [
-          s.quietPick && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No highlights in this read. This is the highest observed IV catch.' }),
-          !s.busy && s.queriedAt && !s.observations.length && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No matching catches in this read. Try nearby raids or open the live map.' }),
+          s.quietPick && !watching && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No highlights in this read. This is the highest observed IV catch.' }),
+          !s.busy && s.queriedAt && !live.length && h('p', { style: { ...fine(c), marginTop: 0 }, children: 'No matching catches in this read. Try nearby raids or open the live map.' }),
           selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
-          live.length > 1 && h('div', { 'aria-label': 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
-            children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) }),
+          live.length > 1 && h('div', { 'aria-label': watching ? 'Catches on watch' : 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
+            children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, isNew: fresh.has(p.observation_id), selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) }),
           h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open full map ↗' })
         ] })
       ] }),
@@ -715,13 +708,18 @@ function OfflineCatch({ ctrl, c, args, place, error, retry }) {
 function CatchCard({ ctrl, attrs, sid, streaming }) {
   const c = useColors(), args = catchAttributes(attrs), place = placeName(attrs), compact = catchVariant(attrs) === 'compact', key = args ? JSON.stringify(args) : '';
   const now = useValue(ctrl.clock), [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
+  // A card that was seen streaming belongs to a new answer; cards in an old transcript do not open the map.
+  const fresh = useRef(false); if (streaming) fresh.current = true;
   useEffect(() => {
     if (!key || streaming) return;
     const targetSid = sid || activeSession();
     let current = true; setData(null); setError('');
     ctrl.api('/card?' + new URLSearchParams(JSON.parse(key))).then(d => {
       if (!current) return; setData(d);
-      if (d.observation && d.status === 'observed') ctrl.adopt(targetSid, d.observation, d.origin, place);
+      if (d.observation && d.status === 'observed') {
+        ctrl.adopt(targetSid, d.observation, d.origin, place, false);
+        if (fresh.current && d.origin) openRadar(ctrl, targetSid, false);
+      }
     }).catch(e => { if (current) setError(e.message); });
     return () => { current = false; };
   }, [ctrl, key, place, sid, streaming, retry]);
