@@ -372,6 +372,25 @@ export function createController(ctx) {
     host.notify({ kind: ok ? 'info' : 'warning', message: ok ? 'PokeIt debug info copied. No location or chat text included.' : 'Could not copy debug info.' });
   }
   const controller = { ctx, revision, clock, iconRev, state, update, api, read, adopt, icon, lastSpot, mapDocument, debug, healthy: () => healthy };
+  // The map follows the chat without help from the model: when the agent's own PokeIt search finishes,
+  // the pane reads the same point and opens beside the answer. Only this plugin's tool names are looked at.
+  let lastPlace = null, lastFollow = 0;
+  ctx.onEvent('tool.complete', event => {
+    const payload = event?.payload, name = typeof payload?.name === 'string' ? payload.name : '', args = payload?.args || {};
+    if (!alive || event?.replayed || !/pokeit/i.test(name)) return;
+    if (name.endsWith('resolve_location')) { lastPlace = { at: Date.now(), label: [text(args.query, 60), text(args.locality, 40)].filter(Boolean).join(', ') }; return; }
+    if (!name.endsWith('find_pokemon') || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
+    const focused = host.state.focusedSessionId.get();
+    if (event.session_id && focused && event.session_id !== focused) return;
+    const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = RADII.includes(args.radius_m) ? args.radius_m : 500;
+    const same = s.center && distanceBearing(s.center, center)?.meters < 5 && s.radius === radius;
+    if (!same || Date.now() - lastFollow > 30000) {
+      lastFollow = Date.now();
+      const label = lastPlace && Date.now() - lastPlace.at < 180000 && lastPlace.label ? lastPlace.label : same ? s.label : 'Search point';
+      void read(sid, center, label, radius);
+    }
+    openRadar(controller, sid, false);
+  });
   controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center, label) => showInRadar(controller, sid, observation, center, label) });
   return controller;
 }
