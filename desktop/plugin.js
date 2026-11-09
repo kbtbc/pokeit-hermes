@@ -1,5 +1,6 @@
 import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STATUSBAR_AREAS, TRANSCRIPT_DIRECTIVE_AREA } from '@hermes/plugin-sdk';
-import { useEffect, useState, useId } from 'react';
+import * as sdk from '@hermes/plugin-sdk';
+import { useEffect, useMemo, useRef, useState, useId } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
 const VERSION = '0.1.17';
@@ -7,11 +8,13 @@ const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
 const ICON = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
+// The sandboxed frame arrived in a later Desktop; older hosts keep the drawn radar.
+const Frame = sdk.SandboxedFrame || null;
 const TERMINAL = new Set(['data_refreshed', 'existing_coverage', 'partial_unverified', 'failed']);
 const RADII = [100, 250, 500, 1000, 2000];
 const EXAMPLES = [['Alpharetta City Hall', 'Alpharetta City Hall, Georgia'], ['Bethesda Terrace, NYC', 'Bethesda Terrace, Central Park, New York'],
   ['Pike Place Market', 'Pike Place Market, Seattle']];
-const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], selected: null,
+const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], others: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0 });
 const text = (s, n = 180) => typeof s === 'string' ? s.slice(0, n) : '';
 const number = n => typeof n === 'number' && Number.isFinite(n);
@@ -296,6 +299,16 @@ export function createController(ctx) {
     if (!icons.has(k)) { icons.set(k, undefined); iconQueue.push([k, `/icon/${p.pokemon_id}${k.includes('_') ? '?form=' + p.form : ''}`]); pumpIcons(); }
     return icons.get(k);
   }
+  // The map viewer page comes from this plugin's own backend once. undefined = not asked, null = no map (older host or install).
+  let mapShell = Frame ? undefined : null, mapAsked = false;
+  function mapDocument() {
+    if (mapShell === undefined && !mapAsked) {
+      mapAsked = true;
+      api('/map', true).then(d => { mapShell = typeof d?.document === 'string' && typeof d.state_slot === 'string' && d.document.includes(d.state_slot) ? d : null; },
+        () => { mapShell = null; }).finally(() => revision.set(revision.get() + 1));
+    }
+    return mapShell;
+  }
   function lastSpot() {
     const v = ctx.storage?.get('last-spot:' + watchScope(), null);
     return v && number(v.lat) && number(v.lon) && Math.abs(v.lat) <= 85 && Math.abs(v.lon) <= 180 && typeof v.label === 'string' && RADII.includes(v.radius)
@@ -303,15 +316,20 @@ export function createController(ctx) {
   }
   async function read(sid, center, label, radius) {
     const s = state(sid), generation = s.generation + 1;
-    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], selected: null, queriedAt: null, coverage: null });
+    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], others: [], selected: null, queriedAt: null, coverage: null });
     try {
       const params = new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50, selection: 'highlights' });
-      const [result, coverage] = await Promise.all([api('/nearby?' + params),
-        api('/coverage?' + new URLSearchParams(center)).catch(() => null)]);
+      // The map also shows everything else that was observed, as small dots. A read only; it never starts a scan.
+      const everything = mapShell === null ? Promise.resolve(null)
+        : api('/nearby?' + new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50, selection: 'all' }), true).catch(() => null);
+      const [result, coverage, all] = await Promise.all([api('/nearby?' + params),
+        api('/coverage?' + new URLSearchParams(center)).catch(() => null), everything]);
       if (!alive || state(sid).generation !== generation) return;
       const observations = (Array.isArray(result.observations) ? result.observations : []).slice(0, 50);
       if (!observations.length && result.highest_observed_iv) observations.push(result.highest_observed_iv);
-      update(sid, { observations, coverage, queriedAt: result.queried_at, truncated: !!result.truncated,
+      const shown = new Set(observations.map(p => p.observation_id));
+      const others = (Array.isArray(all?.observations) ? all.observations : []).filter(p => ID.test(p?.observation_id || '') && !shown.has(p.observation_id)).slice(0, 50);
+      update(sid, { observations, others, coverage, queriedAt: result.queried_at, truncated: !!result.truncated,
         candidates: result.observed_candidates_in_radius, quietPick: !result.observations?.length && !!result.highest_observed_iv,
         busy: false, selected: observations[0]?.observation_id || null });
       ctx.storage?.set('last-spot:' + watchScope(), { lat: center.lat, lon: center.lon, label: text(label, 100), radius });
@@ -323,13 +341,13 @@ export function createController(ctx) {
     const moved = !s.center || distanceBearing(s.center, center)?.meters > 5;
     // A late refresh from the previous point must not undo this explicit selection.
     update(sid, { generation: s.generation + 1, busy: false, error: '' });
-    if (moved) update(sid, { center, label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
+    if (moved) update(sid, { center, others: [], label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
     const targetDistance = distanceBearing(center, observation)?.meters || 0;
     if (targetDistance > s.radius) update(sid, { radius: [250, 500, 1000, 2000].find(n => n >= targetDistance) || 2000 });
     const list = moved ? [] : s.observations.filter(p => p.observation_id !== observation.observation_id);
     update(sid, { observations: [observation, ...list].slice(0, 50), selected: observation.observation_id });
   }
-  function reset() { sessions.clear(); icons.clear(); iconQueue.length = 0; revision.set(revision.get() + 1); healthy = null; }
+  function reset() { sessions.clear(); icons.clear(); iconQueue.length = 0; if (Frame) { mapShell = undefined; mapAsked = false; } revision.set(revision.get() + 1); healthy = null; }
   ctx.setInterval(() => clock.set(Date.now()), 1000);
   const unsub = host.state.profile.subscribe(reset);
   ctx.onEvent('gateway.ready', reset);
@@ -342,7 +360,7 @@ export function createController(ctx) {
     const ok = await ctx.os.writeClipboard(JSON.stringify(report, null, 2));
     host.notify({ kind: ok ? 'info' : 'warning', message: ok ? 'PokeIt debug info copied. No location or chat text included.' : 'Could not copy debug info.' });
   }
-  const controller = { ctx, revision, clock, iconRev, state, update, api, read, adopt, icon, lastSpot, debug, healthy: () => healthy };
+  const controller = { ctx, revision, clock, iconRev, state, update, api, read, adopt, icon, lastSpot, mapDocument, debug, healthy: () => healthy };
   controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center, label) => showInRadar(controller, sid, observation, center, label) });
   return controller;
 }
@@ -528,6 +546,50 @@ function RadarSvg({ ctrl, c, s, sid, ghost = false }) {
       !s.center && h('text', { x: 160, y: 190, fill: c.muted, textAnchor: 'middle', fontSize: 12, children: 'Your next hunt starts here' })
     ] });
 }
+// What the map viewer is given: positions and labels the pane already shows. No session, profile or chat text.
+export function mapState(s, { light = false, watching = false, now = Date.now() } = {}) {
+  const row = p => {
+    const end = typeof p.expires_at === 'string' ? Date.parse(p.expires_at) : NaN;
+    return { id: p.observation_id, lat: p.lat, lon: p.lon, name: text(p.name, 40), pokemon_id: iconKey(p) ? p.pokemon_id : 0,
+      form: iconKey(p)?.includes('_') ? p.form : 0, iv: number(p.iv_percent) ? p.iv_percent : null,
+      tag: p.iv_percent === 100 ? 'Hundo' : p.iv_percent === 0 ? 'Nundo' : hasRankOne(p) ? 'PvP #1' : null,
+      expires: Number.isFinite(end) ? end : null, verified: p.expiry_verified === true };
+  };
+  const live = list => (Array.isArray(list) ? list : []).filter(p => ID.test(p?.observation_id || '') && number(p.lat) && number(p.lon) && !expiry(p, now).expired);
+  return { theme: light ? 'light' : 'dark', center: s.center ? { lat: s.center.lat, lon: s.center.lon } : null, radius: s.radius,
+    busy: !!s.busy, watching: !!watching, selected: s.selected || null, items: live(s.observations).map(row), dots: live(s.others).map(row) };
+}
+// A real map in place of the drawn radar: this plugin's own viewer page inside the SDK's sandboxed frame.
+// The page cannot read PokeIt, start a search or reach the app; a tap on a catch only changes the selection here.
+function MapView({ ctrl, c, s, sid }) {
+  const shell = ctrl.mapDocument(), light = useTheme().resolvedMode === 'light', watch = useValue(ctrl.watch.view);
+  const frame = useRef(null), latest = useRef(null);
+  const watching = watch.active && !!s.center;
+  const payload = mapState(s, { light, watching }), wire = JSON.stringify(payload);
+  latest.current = { payload, wire, s };
+  // A new search point rebuilds the page with that state inside it; everything after travels as messages.
+  const place = s.center ? `${s.center.lat},${s.center.lon},${s.radius}` : '';
+  const src = useMemo(() => shell ? 'data:text/html;charset=utf-8,' + encodeURIComponent(
+    shell.document.replace(shell.state_slot, () => latest.current.wire.replace(/</g, '\\u003c'))) : null, [shell, place]);
+  const send = () => frame.current?.contentWindow?.postMessage({ source: 'pokeit-host', state: latest.current.payload }, '*');
+  useEffect(send, [wire]);
+  useEffect(() => {
+    const onMessage = e => {
+      if (!frame.current || e.source !== frame.current.contentWindow || e.data?.source !== 'pokeit-map') return;
+      if (e.data.type === 'ready') send();
+      const now = latest.current.s, id = e.data.id;
+      if (e.data.type === 'select' && typeof id === 'string' && ID.test(id) && [...now.observations, ...now.others].some(p => p.observation_id === id)) ctrl.update(sid, { selected: id });
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [sid]);
+  if (!shell || !src) return shell === undefined
+    ? h('div', { className: 'pokeit-pulse', style: { height: 340, borderRadius: 12, background: c.bg, border: `1px solid ${c.line}` } })
+    : h(RadarSvg, { ctrl, c, s, sid });
+  return h('div', { style: { height: 'clamp(300px, 46vh, 460px)', borderRadius: 12, overflow: 'hidden', border: `1px solid ${c.line}`, background: c.bg },
+    children: h(Frame, { ref: frame, src, sandbox: 'allow-scripts', title: `Map of catches near ${named(s.label) || 'the search point'}`,
+      style: { width: '100%', height: '100%', border: 0, display: 'block' } }) });
+}
 function ResultRow({ ctrl, c, p, center, selected, now, onSelect }) {
   const timer = expiry(p, now), d = distanceBearing(center, p), hl = highlight(p, c);
   return hs('button', { type: 'button', 'aria-pressed': selected, onClick: onSelect, style: { display: 'grid', gridTemplateColumns: '40px 1fr auto', alignItems: 'center', gap: 10,
@@ -546,7 +608,7 @@ function RadarPane({ ctrl, sessionId }) {
   const s = useRadar(ctrl, sid), now = useValue(ctrl.clock);
   const [query, setQuery] = useState(''), [places, setPlaces] = useState([]), [finding, setFinding] = useState(false), [placeError, setPlaceError] = useState('');
   const live = s.observations.filter(p => !expiry(p, now).expired);
-  const selected = s.observations.find(p => p.observation_id === s.selected), place = named(s.label);
+  const selected = s.observations.find(p => p.observation_id === s.selected) || s.others.find(p => p.observation_id === s.selected), place = named(s.label);
   const last = !s.center && !s.busy ? ctrl.lastSpot() : null;
   useEffect(() => { setPlaces([]); setPlaceError(''); setQuery(''); }, [sid]);
   async function lookup(q) {
@@ -609,9 +671,9 @@ function RadarPane({ ctrl, sessionId }) {
       s.queriedAt && !s.coverage && h('p', { style: fine(c), children: 'Coverage freshness could not be checked. These are existing observations.' }),
       hs('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start', marginTop: 12 }, children: [
         hs('div', { children: [
-          h(RadarSvg, { ctrl, c, s, sid }),
+          h(MapView, { ctrl, c, s, sid }),
           hs('div', { style: { ...rowStyle, justifyContent: 'space-between', marginTop: 8, ...fine(c) }, children: [
-            h('span', { children: `${live.length} shown${s.truncated ? ' · limited sample' : ''}` }),
+            h('span', { children: `${live.length} shown${s.others.length ? ` · ${s.others.length} more as dots` : ''}${s.truncated ? ' · limited sample' : ''}` }),
             h('span', { children: age === null ? '' : `Read ${age < 60 ? age + 's' : Math.floor(age / 60) + 'm'} ago` })
           ] })
         ] }),

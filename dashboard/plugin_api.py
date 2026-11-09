@@ -186,6 +186,38 @@ def icon(pokemon_id, form):
     return {"url": url}, {"cached": False}
 
 
+MAP_DIR = Path(__file__).resolve().parent.parent / "assets" / "map"
+MAP_CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+           "img-src data: https://tile.openstreetmap.org https://pokeit.cc")
+MAP_STATE_SLOT = "__POKEIT_MAP_STATE__"
+_map_document = []
+
+
+def map_document():
+    """The map viewer as one self-contained page, built from the files shipped in assets/map.
+
+    The Desktop plugin shows it in a sandboxed frame and fills MAP_STATE_SLOT with what it
+    already read. Nothing here comes from a request, and the page loads no scripts or styles
+    from the network. Its CSP allows only map tiles and PokeIt species icons.
+    """
+    if not _map_document:
+        try:
+            part = {name: (MAP_DIR / name).read_text(encoding="utf-8") for name in ("leaflet.css", "guest.css", "leaflet.js", "guest.js")}
+        except OSError:
+            raise ProxyError("map_unavailable", "The map viewer files are missing from this install.") from None
+        if any("</script" in part[n].lower() for n in ("leaflet.js", "guest.js")) or any("</style" in part[n].lower() for n in ("leaflet.css", "guest.css")):
+            raise ProxyError("map_unavailable", "The map viewer files could not be combined safely.")
+        _map_document.append(
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<meta http-equiv="Content-Security-Policy" content="{MAP_CSP}">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1"><title>PokeIt map</title>'
+            f'<style>{part["leaflet.css"]}\n{part["guest.css"]}</style></head>'
+            '<body><div id="map"></div><div id="note" role="status"></div>'
+            f'<script id="state" type="application/json">{MAP_STATE_SLOT}</script>'
+            f'<script>{part["leaflet.js"]}</script><script>{part["guest.js"]}</script></body></html>')
+    return {"document": _map_document[0], "state_slot": MAP_STATE_SLOT}, {"cached": True}
+
+
 def call_read(tool, args):
     if tool == "health":
         method, params = "tools/list", {}
@@ -262,6 +294,9 @@ def dispatch(route, params):
     if route == "health":
         allowed(params, set())
         return call_read("health", {})
+    if route == "map":
+        allowed(params, set())
+        return map_document()
     if route == "place":
         allowed(params, {"query", "limit"})
         query = params.get("query", "").strip()
@@ -387,6 +422,11 @@ def scan(request_id: str, request: Request):
 @router.get("/icon/{pokemon_id}")
 def icon_route(pokemon_id: str, request: Request):
     return respond("icon", request, {"pokemon_id": pokemon_id})
+
+
+@router.get("/map")
+def map_route(request: Request):
+    return respond("map", request)
 
 
 @router.get("/health")

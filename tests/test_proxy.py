@@ -229,6 +229,19 @@ class ProxyTests(unittest.TestCase):
             self.assertFalse(result["ok"])
             self.assertNotIn("svg", json.dumps(result))
 
+    def test_map_viewer_is_one_local_page_with_a_closed_csp_and_takes_no_input(self):
+        with patch.object(api, "_fetch", side_effect=AssertionError("the map page must not reach the network")):
+            data, _ = api.dispatch("map", {})
+        page = data["document"]
+        self.assertEqual(page.count(data["state_slot"]), 1)
+        self.assertIn("default-src 'none'", page)
+        self.assertIn("img-src data: https://tile.openstreetmap.org https://pokeit.cc\"", page)
+        for remote in ("<script src", "<link", "@import", "connect-src", "http://"):
+            self.assertNotIn(remote, page.replace("http://www.w3.org", ""))
+        self.assertEqual(page.count("</script>"), 3)
+        with self.assertRaises(ValueError):
+            api.dispatch("map", {"document": "x"})
+
     def test_transport_failure_returns_readable_json_and_is_not_cached(self):
         with patch.object(api, "_fetch", side_effect=api.ProxyError("unreachable","Try again.",True)) as fetch:
             first = self.request("/health")

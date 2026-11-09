@@ -13,7 +13,7 @@ function atom(value) {
 const host = { notify: () => {}, state: { focusedStoredSessionId: atom('test'), focusedSessionId: atom('test'), profile: atom('default'), connectionId: atom('fixture'), gateway: atom('open') } };
 const sdk = { host, atom, useValue: a => a.get(), useTheme: () => ({ resolvedMode: 'dark' }), gatewayActivationEpoch: () => 1,
   PANES_AREA: 'panes', STATUSBAR_AREAS: { right: 'statusBar.right' }, TRANSCRIPT_DIRECTIVE_AREA: 'transcript.directives' };
-const react = { useEffect: () => {}, useState: () => {}, useId: () => 'id' };
+const react = { useEffect: () => {}, useMemo: fn => fn(), useRef: value => ({ current: value }), useState: () => {}, useId: () => 'id' };
 const context = vm.createContext({ URL, URLSearchParams, Date, console });
 const mod = new vm.SourceTextModule(source, { context });
 await mod.link(name => {
@@ -315,4 +315,20 @@ test('watch preferences are profile-scoped, never persist location or autostart,
   f.events['gateway.ready'](); assert.equal(f.watch.view.get().active, false);
   f.watch.start('test', watchCenter, 'City Hall'); await flush(); f.dispose();
   assert.equal(f.timers.at(-1).stopped, true);
+});
+
+test('the map viewer is given only positions and labels, with expired and malformed rows left out', () => {
+  const now = Date.now(), at = m => new Date(now + m * 60000).toISOString();
+  const s = { center: { lat: 34.07, lon: -84.29 }, radius: 500, busy: false, selected: 'pid_a', label: 'City Hall',
+    observations: [{ observation_id: 'pid_a', lat: 34.071, lon: -84.291, name: 'Dratini', pokemon_id: 147, form: 0, iv_percent: 100, expires_at: at(10), expiry_verified: true, encounter_id: 'secret' },
+      { observation_id: 'pid_gone', lat: 34.07, lon: -84.29, name: 'Gone', pokemon_id: 1, expires_at: at(-1), expiry_verified: true },
+      { observation_id: '../bad', lat: 34.07, lon: -84.29 }, { observation_id: 'pid_nowhere', lat: 'x', lon: 1 }],
+    others: [{ observation_id: 'pid_b', lat: 34.072, lon: -84.292, name: 'Rattata', pokemon_id: 19, form: 46, iv_percent: 0 }] };
+  const state = ui.mapState(s, { light: true, watching: true, now });
+  assert.deepEqual(state.items.map(p => p.id), ['pid_a']); assert.deepEqual(state.dots.map(p => p.id), ['pid_b']);
+  assert.equal(state.items[0].tag, 'Hundo'); assert.equal(state.dots[0].tag, 'Nundo'); assert.equal(state.dots[0].form, 46);
+  assert.deepEqual(Object.keys(state.items[0]).sort(), ['expires', 'form', 'id', 'iv', 'lat', 'lon', 'name', 'pokemon_id', 'tag', 'verified']);
+  assert.equal(state.theme, 'light'); assert.equal(state.watching, true); assert.equal(state.selected, 'pid_a');
+  assert.equal(JSON.stringify(state).includes('City Hall'), false);
+  assert.equal(ui.mapState({ center: null, radius: 500, observations: [], others: undefined }).center, null);
 });
