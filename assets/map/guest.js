@@ -166,12 +166,14 @@
     drawForts(next.gyms, next.stops);
     var items = clean(next.items);
     // Redraw the catches only when the list changed, so a selection does not make icons blink.
-    var sig = JSON.stringify([key, items.map(function (p) { return [p.id, p.tag, p.expires]; })]);
+    var watching = next.watching === true;
+    var sig = JSON.stringify([key, watching, items.map(function (p) { return [p.id, p.tag, p.expires]; })]);
     if (sig === listSig) { select(state.selected); return; }
     listSig = sig;
     markers.forEach(function (m) { layer.removeLayer(m.marker); });
     markers = new Map();
-    items.forEach(function (p) { if (!markers.has(p.id)) { addMarker(p, true); } });
+    // Hunt Watch can match dozens: the first six (the best, in the order the plugin sends) stay large, the rest are small.
+    items.forEach(function (p, i) { if (!markers.has(p.id)) { addMarker(p, !watching || i < 6); } });
     if (next.busy !== true) { items.forEach(function (p) { known.add(p.id); }); }
     select(state.selected); tick();
   }

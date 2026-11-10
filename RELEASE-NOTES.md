@@ -12,6 +12,7 @@
 - The skill keeps the city the player gave for every later lookup and sends it as the plain city name, so "I'm in downtown Atlanta" followed by a landmark no longer gets "Did you mean" or no match. A landmark with one exact match is used without a confirming question. "Near me" gets "Let's check it! Is there a nearby landmark, address or intersection?". When a name cannot be placed the agent no longer suggests a street.
 - A scan is read once 45 of its 49 points are in, in the chat and in the Radar, instead of waiting on the last few. The skill always asks for the place's own time zone, so times are never UTC.
 - README: the Hermes version PokeIt needs.
+- The Radar's scan card shows a sweep and "Scanning…" instead of a point count that could look stuck. A link to the live map sits under the Radar's map at all times. With Hunt Watch on, the best six matches are large on the map and the rest small.
 - Fix: when the chat went back to an earlier place, the Radar, its card and a Hunt Watch alert showed the name of the last place instead.
 - The skill keeps the service's order for the catch list, so the chat and the Radar agree more often. It no longer says a catch has despawned just because it dropped out of the list, and does not run code to convert times.
 

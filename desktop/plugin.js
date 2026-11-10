@@ -132,7 +132,8 @@ const fine = c => ({ color: c.muted, fontSize: 12, lineHeight: 1.5 });
 const panel = c => ({ fontFamily: font, color: c.fg, background: c.surface, border: `1px solid ${c.line}`,
   borderRadius: 12, padding: 14, overflow: 'hidden', minWidth: 0, lineHeight: 1.45 });
 const CSS = '@keyframes pokeit-pulse{0%,100%{opacity:1}50%{opacity:.35}}.pokeit-pulse{animation:pokeit-pulse 1.4s ease-in-out infinite}'
-  + '@media(prefers-reduced-motion:reduce){.pokeit-pulse{animation:none}}';
+  + '@keyframes pokeit-spin{to{transform:rotate(360deg)}}.pokeit-spin{animation:pokeit-spin 1.8s linear infinite;transform-origin:50% 50%;transform-box:view-box}'
+  + '@media(prefers-reduced-motion:reduce){.pokeit-pulse,.pokeit-spin{animation:none}}';
 const Styles = () => h('style', { children: CSS });
 function Button({ c, children, primary, style, ...props }) {
   return h('button', { type: 'button', ...props, style: { font: `600 12px ${font}`, borderRadius: 8,
@@ -822,17 +823,21 @@ const SCAN_SLOW_MS = 4 * 60000;
 export function scanLine(scan, now) {
   if (!scan) return null;
   const slow = now - scan.since > SCAN_SLOW_MS && scan.done < scan.total;
-  return { text: `${Math.min(scan.done, scan.total)} of ${scan.total} points`, slow };
+  return { text: 'Scanning…', slow };
 }
 function ScanProgress({ c, scan, place, now, onRead }) {
-  const line = scanLine(scan, now), done = Math.min(scan.done, scan.total);
-  return hs('div', { role: 'status', 'aria-label': `Scan ${line.text}`, style: { ...panel(c), marginTop: 10, padding: 10, display: 'flex', gap: 12, alignItems: 'center' }, children: [
-    h('div', { 'aria-hidden': true, style: { display: 'grid', gridTemplateColumns: 'repeat(7, 7px)', gap: 3, flexShrink: 0 }, children:
-      Array.from({ length: scan.total }, (_, i) => h('span', { className: i < done ? undefined : 'pokeit-pulse',
-        style: { width: 7, height: 7, borderRadius: '50%', background: i < done ? c.accent : c.line } }, i)) }),
+  const line = scanLine(scan, now);
+  // No point count: the plan's count lags the scan, so a number would look stuck. A small radar sweep says it is working.
+  return hs('div', { role: 'status', 'aria-label': `Scanning ${place || 'this spot'}`, style: { ...panel(c), marginTop: 10, padding: 10, display: 'flex', gap: 12, alignItems: 'center' }, children: [
+    hs('svg', { 'aria-hidden': true, width: 40, height: 40, viewBox: '0 0 40 40', style: { flexShrink: 0 }, children: [
+      h('circle', { cx: 20, cy: 20, r: 18, fill: 'none', stroke: c.line }), h('circle', { cx: 20, cy: 20, r: 10, fill: 'none', stroke: c.line }),
+      hs('g', { className: 'pokeit-spin', children: [
+        h('path', { d: 'M20 20 L20 2 A18 18 0 0 1 35.6 11 Z', fill: c.accent, opacity: 0.28 }),
+        h('line', { x1: 20, y1: 20, x2: 20, y2: 2, stroke: c.accent, strokeWidth: 2, strokeLinecap: 'round' })] }),
+      h('circle', { cx: 20, cy: 20, r: 2.5, fill: c.accent })] }),
     hs('div', { style: { minWidth: 0 }, children: [
-      h('strong', { style: { fontSize: 13 }, children: `Scanning ${place || 'this spot'}` }),
-      h('div', { style: fine(c), children: `${line.text} · catches appear here when it finishes` }),
+      h('strong', { style: { fontSize: 13 }, children: `Scanning ${place || 'this spot'}…` }),
+      h('div', { style: fine(c), children: 'Catches appear here when it finishes.' }),
       line.slow && hs('div', { style: { ...fine(c), marginTop: 4 }, children: ['Still waiting on the last points. ',
         h('button', { type: 'button', onClick: onRead, style: { background: 'none', border: 0, padding: 0, color: c.accent, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }, children: 'Show what is here now' })] })
     ] })
@@ -905,14 +910,16 @@ function RadarPane({ ctrl, sessionId }) {
           hs('label', { style: { ...fine(c), display: 'block', marginTop: 6 }, children: ['Ring ', h('select', { 'aria-label': 'Search radius', value: s.radius, disabled: s.busy || watching, onChange: e => void ctrl.read(sid, s.center, s.label, Number(e.target.value)),
             style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: '3px 5px', font: `12px ${font}` }, children: [...new Set([...RADII, s.radius])].sort((a, b) => a - b).map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) }),
             ' around the search point']
-          })
+          }),
+          h('button', { type: 'button', onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)),
+            style: { display: 'block', width: '100%', marginTop: 8, padding: '7px 10px', borderRadius: 8, border: `1px solid ${c.line}`, background: 'none', color: c.accent, font: `600 12px ${font}`, cursor: 'pointer', textAlign: 'center' },
+            children: 'See this area on the PokeIt live map ↗' })
         ] }),
         hs('div', { style: { minWidth: 0 }, children: [
           notice && h('p', { role: 'status', style: { ...fine(c), marginTop: 0 }, children: notice }),
           selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
           live.length > 1 && h('div', { 'aria-label': watching ? 'Catches on watch' : 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
-            children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, isNew: fresh.has(p.observation_id), selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) }),
-          !selected && h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open live map ↗' })
+            children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, isNew: fresh.has(p.observation_id), selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) })
         ] })
       ] }),
       h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label }),

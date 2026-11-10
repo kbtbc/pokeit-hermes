@@ -571,7 +571,7 @@ test('a scan with 45 of 49 points in is read without waiting for the last ones',
 
 test('the scan line counts points and offers the partial read only after four minutes', () => {
   assert.equal(ui.scanLine(null, 0), null);
-  assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).text, '46 of 49 points');
+  assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).text, 'Scanning…');
   assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).slow, false);
   assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 5 * 60000).slow, true);
   assert.equal(ui.scanLine({ done: 49, total: 49, since: 0 }, 5 * 60000).slow, false);
