@@ -1,5 +1,13 @@
 # PokeIt release notes
 
+## 0.1.19 · November 9, 2026 (ET)
+
+- Fix: the Radar did not follow a search in some chats. The hook that follows the agent's search compared the event's session id with only one of the two ids a chat can have, so it ignored every search in chats where they differ. It now accepts either. The pane also follows the chat in front instead of staying tied to the chat it was first opened from, and a Hunt Watch toast opens the catch in the chat you are in.
+- While the agent's scan runs, the Radar opens at the spot and shows one dot per scan point filling as points are confirmed, then reads the spot when the scan is covered. It reads the coverage plan only (it never starts or renews a scan). If a scan stalls, "Show what is here now" reads what exists. If you decline the scan, it stops after 45 seconds and shows the existing data.
+- A PokeIt backend older than the Radar now says so in plain words instead of "Unexpected query parameter". Copy debug info includes counters for what the follow hook saw (no ids, places or text).
+- The skill waits on a scan with `wait_seconds: 10`, never sleeps in the terminal, and after about two minutes stops polling, says how many of the 49 points are confirmed and offers to check again, so a slow scan no longer uses up the agent's tool-call budget.
+- TESTING.md: the Hermes version needed, removing duplicate PokeIt installs, and what to send when the Radar does not follow.
+
 ## 0.1.18 · November 9, 2026 (ET)
 
 - The Radar follows your chat: it opens beside the answer after a catch search, reads the same spot, and lists the best three or four catches (hundos, nundos and PvP #1 first, then the highest IV) with the gyms and Pokéstops around. The search box is gone; ask in chat. Close it and it stays closed until you open it from the status bar. A note under the list says why these catches were picked, and a read older than five minutes refreshes when you return to the pane.

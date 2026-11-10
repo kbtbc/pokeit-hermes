@@ -1,6 +1,6 @@
-# Testing PokeIt 0.1.18
+# Testing PokeIt 0.1.19
 
-About 20 minutes. You need Hermes Desktop 0.23.0 or newer (the status bar shows `client v0.23.0`) and a model that can call tools. Data is US-only for now; the Atlanta and Alpharetta/Roswell areas are the best covered, and [pokeit.cc/coverage](https://pokeit.cc/coverage) shows all of them.
+About 20 minutes. You need Hermes Desktop 0.23.0 or newer (the status bar shows `client v0.23.0`; if it says v0.22.x, update Hermes first) and a model that can call tools. Data is US-only for now; the Atlanta and Alpharetta/Roswell areas are the best covered, and [pokeit.cc/coverage](https://pokeit.cc/coverage) shows all of them.
 
 ## 1. Install the new build
 
@@ -11,7 +11,9 @@ hermes plugins remove pokeit
 hermes plugins install kbtbc/pokeit-hermes --enable --yes-deps
 ```
 
-Quit Hermes Desktop completely and start it again, then open a new chat. If you use another profile, enable PokeIt there too (Capabilities → Plugins).
+Open **Capabilities → Plugins** and make sure there is exactly one PokeIt entry. Older or Desktop-made installs can appear under other names (for example `agent-plugin-pokeit-…`); remove those. Two copies fight each other, and an old backend makes the Radar say "Unexpected query parameter" or "older than the Radar". If you use another profile, enable PokeIt there too.
+
+Quit Hermes Desktop completely and start it again, then open a new chat.
 
 You have the new build when the **PokeIt Radar** pane says "Follows your chat" and has no search box.
 
@@ -24,7 +26,7 @@ You have the new build when the **PokeIt Radar** pane says "Follows your chat" a
 | 3 | In the Radar: click a catch, press **Refresh**, change **Ring** | The map and card follow the selection. **Open live map** opens pokeit.cc. |
 | 4 | Press **Best catches**, then **Raids nearby** | The chat bar holds only the last question, not both. |
 | 5 | "anything good spawning in Avalon", then answer "Hotel side" | The agent goes on with the hotel. It must not ask "did you mean the hotel?" after you already chose it. |
-| 6 | Name a landmark outside the listed areas, in your own city if it is in the US | The agent says a fresh scan is needed and that Hermes will ask you to approve it. The prompt calls the server "untrusted" and the tool "write-capable"; that is expected. **Run** starts a 49-point scan (a few minutes, a progress card follows). **Reject** is also a valid test: the agent should stop and say so. |
+| 6 | Name a landmark outside the listed areas, in your own city if it is in the US | The agent says a fresh scan is needed and that Hermes will ask you to approve it. The prompt calls the server "untrusted" and the tool "write-capable"; that is expected. **Run** starts a 49-point scan (a few minutes). The Radar opens at the spot with a small grid of 49 dots that fill as points are confirmed, then shows the catches when it finishes. If it stalls, "Show what is here now" reads what exists. **Reject** is also a valid test: the agent should stop and say so. |
 | 7 | Radar on Alpharetta or Centennial Olympic Park, Hunt Watch filter "IV at least" 80, press **Watch**, then minimize Hermes | Within a couple of minutes an OS toast titled `PokeIt! Nearby <species> (<IV>%)`, with where and when it was found, when it expires and a map link. Clicking it opens the catch in the Radar. Does it make a sound? Note whether it does. |
 | 8 | Start a new chat before searching | The empty Radar shows a faded map behind the rings. |
 
@@ -34,7 +36,7 @@ The watch ends by itself after 2 hours, or press **Stop**. It never starts scans
 
 - The question you typed, the model, your OS, and the time with timezone.
 - A screenshot of the chat and the Radar.
-- The Radar's **Copy debug info** output. It holds plugin and backend versions, no location or chat text.
+- The Radar's **Copy debug info** output. It holds plugin and backend versions and counters for what the chat-following hook saw, no location or chat text. If the Radar did not follow a search, this is the most useful thing to send.
 - Anything that felt slow, confusing or wrong, even if it worked.
 
 Send it on [Discord](https://discord.gg/3NSTeCxBXk).

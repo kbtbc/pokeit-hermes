@@ -84,7 +84,10 @@ test('registration only mounts UI and timers; it never calls the service', () =>
   assert.equal(contributions[0].data.placement, 'right');
   assert.equal(contributions[2].data.name, 'pokeit-catch');
   for (const dispose of disposers) dispose();
-  assert.doesNotMatch(source, /request_scan|composer\.submit|window\.hermes|document\.(?:querySelector|getElementById)/);
+  // The plugin may watch for the agent's scan tool finishing (one exact expression, to show progress). It may never name that tool anywhere else, which would be a way to call it.
+  const observed = "name.endsWith('request_scan')";
+  assert.equal(source.split(observed).length - 1, 1);
+  assert.doesNotMatch(source.replace(observed, ''), /request_scan|composer\.submit|window\.hermes|document\.(?:querySelector|getElementById)/);
 });
 
 test('Show in Radar selects the catch and opens the same workspace for its chat', () => {
@@ -462,4 +465,76 @@ test('the Radar shows the same best-four list as the chat: highlights first, fil
   await broken.read('t', { lat: 34, lon: -84 }, 'Spot', 500);
   assert.equal(JSON.stringify(broken.state('t').observations.map(p => p.observation_id)), JSON.stringify(['pid_hl']));
   assert.equal(broken.state('t').error, '');
+});
+
+function followHarness(rest) {
+  const events = {}, timeouts = [];
+  const ctrl = ui.createController({ setInterval: () => () => {}, setTimeout: (cb, ms) => { timeouts.push({ cb, ms }); return () => {}; },
+    onEvent: (name, fn) => { events[name] = fn; }, onDispose: () => {}, rest,
+    storage: { get: (k, fallback) => fallback, set: () => {} } });
+  return { ctrl, events, timeouts };
+}
+const finds = (id, lat) => ({ session_id: id, payload: { name: 'mcp__pokeit__find_pokemon', args: { lat, lon: -84.29, radius_m: 500 } } });
+
+test('the follow hook accepts the stored or the runtime id of the focused chat, and ignores another chat and replays', async () => {
+  host.openWorkspace = () => {};
+  host.state.focusedStoredSessionId.set('stored-1'); host.state.focusedSessionId.set('runtime-1');
+  const paths = [];
+  const f = followHarness(async path => { paths.push(path); return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-09T21:00:00Z' } : {} }; });
+  const reads = () => paths.filter(p => p.startsWith('/nearby')).length;
+  f.events['tool.complete'](finds('stored-1', 34.01)); await flush(); assert.equal(reads() > 0, true);
+  const before = reads();
+  f.events['tool.complete'](finds('runtime-1', 34.02)); await flush(); assert.equal(reads() > before, true);
+  const mid = reads();
+  f.events['tool.complete'](finds('some-other-chat', 34.03)); await flush(); assert.equal(reads(), mid);
+  f.events['tool.complete']({ ...finds('stored-1', 34.04), replayed: true }); await flush(); assert.equal(reads(), mid);
+  host.state.focusedStoredSessionId.set('test'); host.state.focusedSessionId.set('test');
+});
+
+test('a scan the agent starts shows its progress in the Radar and the spot is read when the plan is covered', async () => {
+  host.openWorkspace = () => {};
+  host.state.focusedStoredSessionId.set('stored-2'); host.state.focusedSessionId.set('runtime-2');
+  let plan = { status: 'in_progress', total_points: 49, counts: { existing_area: 0, fresh: 10, pending: 39, needed: 0 } };
+  const paths = [];
+  const f = followHarness(async path => { paths.push(path); if (path.startsWith('/coverage')) return { ok: true, data: { scan_plan: plan } };
+    return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-09T21:00:00Z' } : {} }; });
+  f.events['tool.complete']({ session_id: 'stored-2', payload: { name: 'mcp__pokeit__request_scan', args: { lat: 40.774, lon: -73.971 } } });
+  assert.equal(f.ctrl.state('stored-2').scan.done, 0);
+  await f.timeouts.shift().cb();
+  assert.equal(f.ctrl.state('stored-2').scan.done, 10); assert.equal(f.ctrl.state('stored-2').center.lat, 40.774);
+  assert.equal(paths.filter(p => p.startsWith('/nearby')).length, 0);
+  plan = { status: 'fresh', total_points: 49, counts: { existing_area: 0, fresh: 49, pending: 0, needed: 0 } };
+  await f.timeouts.shift().cb(); await flush();
+  assert.equal(f.ctrl.state('stored-2').scan, null); assert.equal(paths.some(p => p.startsWith('/nearby')), true);
+  host.state.focusedStoredSessionId.set('test'); host.state.focusedSessionId.set('test');
+});
+
+test('a scan that never shows up (the player declined) stops quietly and the spot is read as it is', async () => {
+  host.openWorkspace = () => {};
+  host.state.focusedStoredSessionId.set('stored-3'); host.state.focusedSessionId.set('runtime-3');
+  const paths = [];
+  const f = followHarness(async path => { paths.push(path); if (path.startsWith('/coverage')) return { ok: true, data: { scan_plan: { status: 'needs_scan', total_points: 49, counts: { existing_area: 0, fresh: 0, pending: 0, needed: 49 } } } };
+    return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-09T21:00:00Z' } : {} }; });
+  f.events['tool.complete']({ session_id: 'stored-3', payload: { name: 'mcp__pokeit__request_scan', args: { lat: 40.7, lon: -73.9 } } });
+  await f.timeouts.shift().cb();
+  assert.equal(f.ctrl.state('stored-3').scan.seen, false);
+  const real = Date.now; Date.now = () => real() + 60000;
+  try { await f.timeouts.shift().cb(); await flush(); } finally { Date.now = real; }
+  assert.equal(f.ctrl.state('stored-3').scan, null); assert.equal(paths.some(p => p.startsWith('/nearby')), true);
+  host.state.focusedStoredSessionId.set('test'); host.state.focusedSessionId.set('test');
+});
+
+test('the scan line counts points and offers the partial read only after four minutes', () => {
+  assert.equal(ui.scanLine(null, 0), null);
+  assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).text, '46 of 49 points');
+  assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).slow, false);
+  assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 5 * 60000).slow, true);
+  assert.equal(ui.scanLine({ done: 49, total: 49, since: 0 }, 5 * 60000).slow, false);
+});
+
+test('an older PokeIt backend gets a plain instruction instead of "Unexpected query parameter"', async () => {
+  const ctrl = iconController(async () => ({ ok: false, error: { message: 'Unexpected query parameter.' } }));
+  await ctrl.read('t', { lat: 34, lon: -84 }, 'Spot', 500);
+  assert.match(ctrl.state('t').error, /older than the Radar/);
+  assert.doesNotMatch(ctrl.state('t').error, /Unexpected query parameter/);
 });

@@ -3,7 +3,7 @@ import * as sdk from '@hermes/plugin-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.18';
+const VERSION = '0.1.19';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -16,7 +16,7 @@ const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how man
 const EXAMPLES = ['Alpharetta City Hall, Georgia', 'Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
-  queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0 });
+  queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0, scan: null });
 const text = (s, n = 180) => typeof s === 'string' ? s.slice(0, n) : '';
 const number = n => typeof n === 'number' && Number.isFinite(n);
 const named = label => label && !['Choose a spot', 'Search point'].includes(label) ? label : '';
@@ -301,7 +301,7 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
   return { view, start, stop, configure, poll };
 }
 export function createController(ctx) {
-  const revision = atom(0), clock = atom(Date.now()), iconRev = atom(0), sessions = new Map();
+  const revision = atom(0), clock = atom(Date.now()), iconRev = atom(0), sessions = new Map(), scans = new Map();
   const icons = new Map(), iconQueue = [];
   let alive = true, lastError = '', healthy = null, iconsBusy = 0;
   const key = sid => sid || activeSession();
@@ -323,7 +323,9 @@ export function createController(ctx) {
       if (!quiet) healthy = true;
       return response.data;
     } catch (e) {
-      const message = e?.safeMessage ? text(e.message, 240) : 'PokeIt could not be reached. Enable the plugin for the profile you are chatting in (Capabilities, then Plugins), then try again.';
+      const old = /unexpected query parameter/i.test(e?.message || '');
+      const message = old ? 'This PokeIt backend is older than the Radar. Remove every PokeIt entry under Capabilities → Plugins, restart Hermes, then install it again.'
+        : e?.safeMessage ? text(e.message, 240) : 'PokeIt could not be reached. Enable the plugin for the profile you are chatting in (Capabilities, then Plugins), then try again.';
       // Icons are decoration; a failed one must not mark the backend unhealthy.
       if (!quiet) { healthy = false; lastError = message; }
       throw new Error(message);
@@ -378,7 +380,8 @@ export function createController(ctx) {
   }
   async function read(sid, center, label, radius) {
     const s = state(sid), generation = s.generation + 1;
-    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null });
+    scans.delete(sid);
+    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null, scan: null });
     try {
       const params = new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50, selection: 'highlights' });
       void loadForts(sid, center, radius, generation);
@@ -419,7 +422,7 @@ export function createController(ctx) {
     let health;
     try { health = await api('/health'); } catch { health = { reachable: false }; }
     const report = { plugin: 'PokeIt', version: VERSION, desktop_gateway: host.state.gateway.get(),
-      backend: health, last_error: lastError || null, checked_at: new Date().toISOString() };
+      backend: health, last_error: lastError || null, follow_hook: { ...follow }, checked_at: new Date().toISOString() };
     const ok = await ctx.os.writeClipboard(JSON.stringify(report, null, 2));
     host.notify({ kind: ok ? 'info' : 'warning', message: ok ? 'PokeIt debug info copied. No location or chat text included.' : 'Could not copy debug info.' });
   }
@@ -427,23 +430,64 @@ export function createController(ctx) {
   // The map follows the chat without help from the model: when the agent's own PokeIt search finishes,
   // the pane reads the same point and opens beside the answer. Only this plugin's tool names are looked at.
   let lastPlace = null, lastFollow = 0;
+  // What the hook has seen, for the debug report: counts only, never ids, places or text.
+  const follow = { events: 0, replayed: 0, other_chat: 0, reads: 0, scans_tracked: 0 };
+  // The event's session id can be the stored id or the runtime id of the focused chat. Either one means "this chat".
+  const inFocusedChat = event => {
+    const ids = [host.state.focusedSessionId.get(), host.state.focusedStoredSessionId?.get()].filter(Boolean);
+    return !event.session_id || !ids.length || ids.includes(event.session_id);
+  };
+  const SCAN_POLL_MS = 5000, SCAN_START_GRACE_MS = 45000, SCAN_GIVE_UP_MS = 12 * 60000;
+  // While the agent's scan runs the Radar shows its progress, read from the coverage plan (read-only; it never starts or renews a scan).
+  // When the plan says the footprint is covered, the pane reads the spot. If no sign of a scan appears at all (the player declined
+  // the approval), it stops quietly and shows what already exists.
+  function trackScan(sid, center, label, radius) {
+    if (typeof ctx.setTimeout !== 'function') return;
+    const token = {}, startedAt = Date.now(), generation = state(sid).generation + 1;
+    scans.set(sid, token); follow.scans_tracked++;
+    update(sid, { generation, center, label, radius, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null, error: '', busy: false,
+      scan: { done: 0, total: 49, since: startedAt, seen: false } });
+    void loadForts(sid, center, radius, generation);
+    const finish = () => { scans.delete(sid); void read(sid, center, label, radius); };
+    const tick = async () => {
+      if (!alive || scans.get(sid) !== token) return;
+      let plan = null;
+      try { plan = (await api('/coverage?' + new URLSearchParams(center), true))?.scan_plan; } catch { /* try again next time */ }
+      if (!alive || scans.get(sid) !== token) return;
+      const total = Number.isInteger(plan?.total_points) && plan.total_points > 0 ? plan.total_points : 49;
+      const counts = plan?.counts || {};
+      const done = Math.min(total, (Number.isInteger(counts.existing_area) ? counts.existing_area : 0) + (Number.isInteger(counts.fresh) ? counts.fresh : 0));
+      const covered = plan && ['fresh', 'existing_coverage'].includes(plan.status);
+      const seen = !!(state(sid).scan?.seen || (plan && plan.status !== 'needs_scan') || done > 0 && done < total);
+      const age = Date.now() - startedAt;
+      if (covered || age > SCAN_GIVE_UP_MS || (!seen && age > SCAN_START_GRACE_MS)) { finish(); return; }
+      update(sid, { scan: { done, total, since: startedAt, seen } });
+      ctx.setTimeout(tick, SCAN_POLL_MS);
+    };
+    ctx.setTimeout(tick, 1500);
+  }
+  function stopScan(sid) { scans.delete(sid); update(sid, { scan: null }); }
+  controller.stopScan = stopScan;
   ctx.onEvent('tool.complete', event => {
+    follow.events++;
     const payload = event?.payload, name = typeof payload?.name === 'string' ? payload.name : '', args = payload?.args || {};
-    if (!alive || event?.replayed || !/pokeit/i.test(name)) return;
+    if (!alive || !/pokeit/i.test(name)) return;
+    if (event?.replayed) { follow.replayed++; return; }
     if (name.endsWith('resolve_location')) { lastPlace = { at: Date.now(), label: [text(args.query, 60), text(args.locality, 40)].filter(Boolean).join(', ') }; return; }
-    if (!name.endsWith('find_pokemon') || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
-    const focused = host.state.focusedSessionId.get();
-    if (event.session_id && focused && event.session_id !== focused) return;
+    const finds = name.endsWith('find_pokemon'), scanning = name.endsWith('request_scan');
+    if (!(finds || scanning) || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
+    if (!inFocusedChat(event)) { follow.other_chat++; return; }
     const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = RADII.includes(args.radius_m) ? args.radius_m : 500;
+    const placeLabel = lastPlace && Date.now() - lastPlace.at < 180000 && lastPlace.label ? lastPlace.label : null;
+    if (scanning) { trackScan(sid, center, placeLabel || 'Search point', radius); openRadar(controller, sid, false); return; }
     const same = s.center && distanceBearing(s.center, center)?.meters < 5 && s.radius === radius;
     if (!same || Date.now() - lastFollow > 30000) {
-      lastFollow = Date.now();
-      const label = lastPlace && Date.now() - lastPlace.at < 180000 && lastPlace.label ? lastPlace.label : same ? s.label : 'Search point';
-      void read(sid, center, label, radius);
+      lastFollow = Date.now(); follow.reads++;
+      void read(sid, center, placeLabel || (same ? s.label : 'Search point'), radius);
     }
     openRadar(controller, sid, false);
   });
-  controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center, label) => showInRadar(controller, sid, observation, center, label) });
+  controller.watch = createHuntWatch(ctx, { api, onFound: (sid, observation, center, label) => showInRadar(controller, activeSession(), observation, center, label) });
   return controller;
 }
 function useRadar(ctrl, sid) { useValue(ctrl.revision); return ctrl.state(sid); }
@@ -740,8 +784,30 @@ export function radarNotice({ busy, queriedAt, quietPick, watching, shown, live,
   if (quietPick && !watching) return 'No hundos, nundos or PvP #1 in this read. These are the highest-IV catches.';
   return null;
 }
+// A scan the agent started is running: one dot per scan point, filling as points are confirmed. Compact on purpose.
+const SCAN_SLOW_MS = 4 * 60000;
+export function scanLine(scan, now) {
+  if (!scan) return null;
+  const slow = now - scan.since > SCAN_SLOW_MS && scan.done < scan.total;
+  return { text: `${Math.min(scan.done, scan.total)} of ${scan.total} points`, slow };
+}
+function ScanProgress({ c, scan, place, now, onRead }) {
+  const line = scanLine(scan, now), done = Math.min(scan.done, scan.total);
+  return hs('div', { role: 'status', 'aria-label': `Scan ${line.text}`, style: { ...panel(c), marginTop: 10, padding: 10, display: 'flex', gap: 12, alignItems: 'center' }, children: [
+    h('div', { 'aria-hidden': true, style: { display: 'grid', gridTemplateColumns: 'repeat(7, 7px)', gap: 3, flexShrink: 0 }, children:
+      Array.from({ length: scan.total }, (_, i) => h('span', { className: i < done ? undefined : 'pokeit-pulse',
+        style: { width: 7, height: 7, borderRadius: '50%', background: i < done ? c.accent : c.line } }, i)) }),
+    hs('div', { style: { minWidth: 0 }, children: [
+      h('strong', { style: { fontSize: 13 }, children: `Scanning ${place || 'this spot'}` }),
+      h('div', { style: fine(c), children: `${line.text} · catches appear here when it finishes` }),
+      line.slow && hs('div', { style: { ...fine(c), marginTop: 4 }, children: ['Still waiting on the last points. ',
+        h('button', { type: 'button', onClick: onRead, style: { background: 'none', border: 0, padding: 0, color: c.accent, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }, children: 'Show what is here now' })] })
+    ] })
+  ] });
+}
 function RadarPane({ ctrl, sessionId }) {
-  const c = useColors(), active = useActiveSession(), sid = sessionId || active;
+  // The pane follows the chat in front. It must not stay tied to the chat it was first opened from.
+  const c = useColors(), sid = useActiveSession();
   const s = useRadar(ctrl, sid), now = useValue(ctrl.clock), w = useValue(ctrl.watch.view);
   // Coming back to an old read (the pane reopened, or the window shown again) reads the same spot once more. It is an existing-data read, never a scan.
   useEffect(() => {
@@ -788,7 +854,8 @@ function RadarPane({ ctrl, sessionId }) {
         last && h(Button, { c, style: { textAlign: 'left' }, disabled: s.busy, onClick: () => void ctrl.read(sid, last.center, last.label, last.radius), children: `Back to ${last.label}` })
       ] })
     ] }) : hs('div', { children: [
-      status === 'needs_scan' && hs('div', { style: { ...panel(c), marginTop: 10, padding: 10 }, children: [
+      s.scan && h(ScanProgress, { c, scan: s.scan, place, now, onRead: () => { ctrl.stopScan?.(sid); void ctrl.read(sid, s.center, s.label, s.radius); } }),
+      status === 'needs_scan' && !s.scan && hs('div', { style: { ...panel(c), marginTop: 10, padding: 10 }, children: [
         h('p', { style: { ...fine(c), margin: '0 0 6px' }, children: 'No recent scan here. These are existing observations.' }),
         h(Button, { c, onClick: () => void draft(`Check ${s.label} and scan if needed. Use this selected map pin: ${mapUrl(s.center, s.radius)}`, sid), children: 'Ask Hermes to scan' })
       ] }),
