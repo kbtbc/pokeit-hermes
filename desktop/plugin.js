@@ -578,8 +578,12 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
     : w.active ? `Watching ${w.label} for ${what}, within 500 m. ${w.notice}`
       : w.notice || 'Set it and get on with your work. A desktop alert tells you when a match appears within 500 m.';
   return hs('section', { 'aria-label': 'Hunt Watch', style: { ...panel(c), marginTop: 14, padding: 12, borderColor: w.active ? c.accent : c.line }, children: [
+    hs('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 8 }, children: [
+      h('strong', { style: { fontSize: 16, fontWeight: 800 }, children: 'Watch it' }),
+      h('span', { style: { fontSize: 13, fontWeight: 600, color: c.accent }, children: '· Real-Time Desktop Notifications!' }),
+      w.active && h('span', { style: { color: c.accent, fontSize: 11, marginLeft: 'auto' }, children: '● on' })
+    ] }),
     hs('div', { style: { ...rowStyle, gap: 6 }, children: [
-      hs('strong', { style: { fontSize: 13, marginRight: 4 }, children: ['Watch it · Desktop Alerts', w.active && h('span', { style: { color: c.accent, fontSize: 11, marginLeft: 6 }, children: '● on' })] }),
       h('select', { 'aria-label': 'Alert me about', value: w.kind, disabled: w.active, onChange: e => ctrl.watch.configure({ ...w, kind: e.target.value }),
         style: { ...field, flex: '1 1 120px', minWidth: 0 }, children: Object.entries(WATCH_KINDS).map(([value, name]) => h('option', { value, children: name }, value)) }),
       w.kind === 'iv' && h('input', { 'aria-label': 'Minimum IV %', type: 'number', min: 0, max: 100, step: 1, value: w.minIV, disabled: w.active,
