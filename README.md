@@ -7,9 +7,9 @@
 
 **Ask Hermes what's worth catching near you.** A live radar opens beside the chat with the best Pokémon GO catches, raids and events around any spot, from a real scanning network. Set a watch, go back to work, and your desktop tells you when something good appears. No account, no API key.
 
-![Hermes Desktop: a PokeIt answer in chat with the PokeIt Radar beside it, showing a hundo Sudowoodo near Alpharetta City Hall](assets/desktop-radar.webp)
+![Hermes Desktop: a PokeIt answer in chat with the PokeIt Radar beside it, showing four catches on a live map near the Georgia Aquarium in Atlanta](assets/desktop-radar.webp)
 
-*Hermes Desktop: the answer in chat, and the Radar following it with the featured catch, a map, gyms, Pokéstops and desktop alerts. Live data near Alpharetta City Hall.*
+*Hermes Desktop: the answer in chat, and the PokeIt Radar following it with the featured catch, a live map with gyms, raids and Pokéstops, and real-time desktop alerts. Live data near the Georgia Aquarium in Atlanta.*
 
 ## Install
 

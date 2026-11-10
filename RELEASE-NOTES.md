@@ -1,6 +1,6 @@
 # PokeIt release notes
 
-## Unreleased · November 10, 2026 (ET)
+## 0.1.20 · November 10, 2026 (ET)
 
 - The Radar now follows raid, gym, showcase, Max Battle and PokéStop questions as well as catches; **Raids nearby** asks for raids and eggs right now, and the line under the map counts the raids on the gyms shown.
 - A raid question turns the Radar to raids: bosses and eggs lead on the map and in a list with the gym, distance, open slots and time left, and catches step back to small faded icons. A catch question turns it back.
