@@ -12,6 +12,8 @@ const ICON = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
 const Frame = sdk.SandboxedFrame || null;
 const TERMINAL = new Set(['data_refreshed', 'existing_coverage', 'partial_unverified', 'failed']);
 const RADII = [100, 250, 500, 1000, 2000];
+// The agent can read at another radius (371 m after a scan). The Radar must read the same ring or its list differs from the chat's.
+export const radiusOf = n => Number.isFinite(n) && n >= 50 && n <= 2000 ? Math.round(n) : 500;
 const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
 const EXAMPLES = ['the Georgia Aquarium in Atlanta', 'Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
@@ -356,7 +358,7 @@ export function createController(ctx) {
   }
   function lastSpot() {
     const v = ctx.storage?.get('last-spot:' + watchScope(), null);
-    return v && number(v.lat) && number(v.lon) && Math.abs(v.lat) <= 85 && Math.abs(v.lon) <= 180 && typeof v.label === 'string' && RADII.includes(v.radius)
+    return v && number(v.lat) && number(v.lon) && Math.abs(v.lat) <= 85 && Math.abs(v.lon) <= 180 && typeof v.label === 'string' && radiusOf(v.radius) === v.radius
       ? { center: { lat: v.lat, lon: v.lon }, label: text(v.label, 100), radius: v.radius } : null;
   }
   // Pokestops and gyms are the map's landmarks. A read of existing data; a failure only leaves the map plainer.
@@ -378,6 +380,19 @@ export function createController(ctx) {
       return [...highlights, ...extra].slice(0, Math.max(BEST_COUNT, highlights.length));
     } catch { return highlights; }  // the highlights alone are still a true read
   }
+  // A read taken while a scan was finishing says "a scan is in progress". Look at the coverage plan again (read-only)
+  // until it says otherwise, so the line does not stay up after the scan is done.
+  function settle(sid, center, generation, tries) {
+    if (typeof ctx.setTimeout !== 'function' || tries >= 12) return;
+    ctx.setTimeout(async () => {
+      if (!alive || state(sid).generation !== generation) return;
+      let coverage = null;
+      try { coverage = await api('/coverage?' + new URLSearchParams(center), true); } catch { /* try again next time */ }
+      if (!alive || state(sid).generation !== generation) return;
+      if (coverage?.scan_plan?.status && coverage.scan_plan.status !== 'in_progress') update(sid, { coverage });
+      else settle(sid, center, generation, tries + 1);
+    }, 10000);
+  }
   async function read(sid, center, label, radius) {
     const s = state(sid), generation = s.generation + 1;
     scans.delete(sid);
@@ -397,6 +412,7 @@ export function createController(ctx) {
         candidates: result.observed_candidates_in_radius, quietPick: !highlights.length && observations.length > 0,
         busy: false, selected: observations[0]?.observation_id || null });
       ctx.storage?.set('last-spot:' + watchScope(), { lat: center.lat, lon: center.lon, label: text(label, 100), radius });
+      if (coverage?.scan_plan?.status === 'in_progress') settle(sid, center, generation, 0);
     } catch (e) { if (alive && state(sid).generation === generation) update(sid, { busy: false, error: e.message }); }
   }
   function adopt(sid, observation, origin, place, pick = true) {
@@ -477,7 +493,7 @@ export function createController(ctx) {
     const finds = name.endsWith('find_pokemon'), scanning = name.endsWith('request_scan');
     if (!(finds || scanning) || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
     if (!inFocusedChat(event)) { follow.other_chat++; return; }
-    const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = RADII.includes(args.radius_m) ? args.radius_m : 500;
+    const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = radiusOf(args.radius_m);
     const placeLabel = lastPlace && Date.now() - lastPlace.at < 180000 && lastPlace.label ? lastPlace.label : null;
     if (scanning) { trackScan(sid, center, placeLabel || 'Search point', radius); openRadar(controller, sid, false); return; }
     const same = s.center && distanceBearing(s.center, center)?.meters < 5 && s.radius === radius;
@@ -868,7 +884,7 @@ function RadarPane({ ctrl, sessionId }) {
             h('span', { style: { fontVariantNumeric: 'tabular-nums', color: watching ? c.accent : c.muted }, children: next !== null ? (w.busy ? 'Reading…' : `Live · next read in ${next}s`) : age === null ? '' : `Read ${age < 60 ? age + 's' : Math.floor(age / 60) + 'm'} ago` })
           ] }),
           hs('label', { style: { ...fine(c), display: 'block', marginTop: 6 }, children: ['Ring ', h('select', { 'aria-label': 'Search radius', value: s.radius, disabled: s.busy || watching, onChange: e => void ctrl.read(sid, s.center, s.label, Number(e.target.value)),
-            style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: '3px 5px', font: `12px ${font}` }, children: RADII.map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) }),
+            style: { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 6, padding: '3px 5px', font: `12px ${font}` }, children: [...new Set([...RADII, s.radius])].sort((a, b) => a - b).map(n => h('option', { value: n, children: n < 1000 ? n + ' m' : n / 1000 + ' km' }, n)) }),
             ' around the search point']
           })
         ] }),

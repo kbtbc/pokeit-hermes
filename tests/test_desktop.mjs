@@ -491,6 +491,23 @@ test('the follow hook accepts the stored or the runtime id of the focused chat, 
   host.state.focusedStoredSessionId.set('test'); host.state.focusedSessionId.set('test');
 });
 
+test('the Radar reads the ring the agent read, including 371 m after a scan, and a stale in-progress line clears', async () => {
+  host.openWorkspace = () => {};
+  assert.equal(ui.radiusOf(371), 371); assert.equal(ui.radiusOf(20), 500); assert.equal(ui.radiusOf('x'), 500); assert.equal(ui.radiusOf(5000), 500);
+  const paths = []; let status = 'in_progress';
+  const f = followHarness(async path => { paths.push(path); return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-09T21:00:00Z' }
+    : path.startsWith('/coverage') ? { scan_plan: { status } } : {} }; });
+  f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__find_pokemon', args: { lat: 40.7055, lon: -74.0134, radius_m: 371 } } });
+  await flush();
+  assert.equal(paths.filter(p => p.startsWith('/nearby')).every(p => /radius_m=371/.test(p)), true);
+  assert.equal(f.ctrl.state('test').radius, 371);
+  assert.equal(f.ctrl.state('test').coverage.scan_plan.status, 'in_progress');
+  status = 'fresh';
+  const again = f.timeouts.find(t => t.ms === 10000); assert.ok(again);
+  await again.cb(); await flush();
+  assert.equal(f.ctrl.state('test').coverage.scan_plan.status, 'fresh');
+});
+
 test('a scan the agent starts shows its progress in the Radar and the spot is read when the plan is covered', async () => {
   host.openWorkspace = () => {};
   host.state.focusedStoredSessionId.set('stored-2'); host.state.focusedSessionId.set('runtime-2');
