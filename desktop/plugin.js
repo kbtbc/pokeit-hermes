@@ -15,8 +15,8 @@ const RADII = [100, 250, 500, 1000, 2000];
 // The agent can read at another radius (371 m after a scan). The Radar must read the same ring or its list differs from the chat's.
 export const radiusOf = n => Number.isFinite(n) && n >= 50 && n <= 2000 ? Math.round(n) : 500;
 const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
-// The first example sits inside ongoing coverage, so it answers at once. The others need a scan, which Hermes asks the player to approve.
-const EXAMPLES = [['the Georgia Aquarium in Atlanta', 'live now'], ['Bethesda Terrace in Central Park, New York', 'fresh scan'], ['Pike Place Market, Seattle', 'fresh scan']];
+// The "live now" examples sit inside ongoing coverage, so they answer at once. A "fresh scan" one needs a scan, which Hermes asks the player to approve.
+const EXAMPLES = [['the Georgia Aquarium in Atlanta', 'live now'], ['the Texas State Capitol in Austin', 'live now'], ['Bethesda Terrace in Central Park, New York', 'fresh scan']];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0, scan: null });
@@ -537,13 +537,14 @@ export function showInRadar(ctrl, sid, observation, center, place) {
 }
 export function followUpQuestion(kind, s) {
   if (!s.center) return null;
-  const place = s.label && !['Choose a spot', 'Search point'].includes(s.label) ? `near ${s.label}` : 'near this selected map pin';
-  const names = [...new Set(s.observations.map(p => text(p.name, 60)).filter(Boolean))].slice(0, 3);
-  const question = kind === 'catches' ? `What is worth catching ${place}? Show PokeIt cards.`
-    : kind === 'raids' ? `What active raids are ${place}? Keep eggs separate.`
+  const named = !!s.label && !['Choose a spot', 'Search point'].includes(s.label);
+  const place = named ? `near ${s.label}` : 'near this map pin';
+  const question = kind === 'catches' ? `What's worth catching ${place} right now?`
+    : kind === 'raids' ? `What raids are on ${place}? Keep eggs separate.`
     : kind === 'gyms' ? `Which gyms ${place} have open slots?`
-    : `Which active events make ${names.length ? names.join(', ') : 'these catches'} useful today ${place}?`;
-  return `${question} Use this search area: ${mapUrl(s.center, s.radius)}`;
+    : `What events are on today, and do they matter for the spawns ${place}?`;
+  // A named place resolves by itself. Only a bare pin needs its link, so the agent reads the same point.
+  return named ? question : `${question} Use this search area: ${mapUrl(s.center, s.radius)}`;
 }
 function FollowUps({ ctrl, c, sid }) {
   const s = useRadar(ctrl, sid);
@@ -557,11 +558,13 @@ function FollowUps({ ctrl, c, sid }) {
 function HuntWatch({ ctrl, c, sid, center, label }) {
   const w = useValue(ctrl.watch.view);
   const field = { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: '7px 8px', font: `12px ${font}` };
+  const what = w.kind === 'iv' ? `IV ${w.minIV}% or better` : WATCH_KINDS[w.kind].toLowerCase();
   const status = w.busy ? 'Checking existing observations…'
-    : w.active ? `Watching ${w.label} · 500 m. ${w.notice}` : w.notice || 'Get an alert when a new match appears here. Checks once a minute for 2 hours and never starts a scan.';
-  return hs('section', { 'aria-label': 'Hunt Watch', style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${c.line}` }, children: [
+    : w.active ? `Watching ${w.label} for ${what}, within 500 m. ${w.notice}`
+      : w.notice || 'Press Watch and get on with your work. A desktop alert tells you when a new match appears within 500 m. It checks once a minute for 2 hours and never starts a scan.';
+  return hs('section', { 'aria-label': 'Hunt Watch', style: { ...panel(c), marginTop: 14, padding: 12, borderColor: w.active ? c.accent : c.line }, children: [
     hs('div', { style: { ...rowStyle, gap: 6 }, children: [
-      h('strong', { style: { fontSize: 12, marginRight: 4 }, children: 'Hunt Watch' }),
+      hs('strong', { style: { fontSize: 13, marginRight: 4 }, children: ['Hunt Watch', w.active && h('span', { style: { color: c.accent, fontSize: 11, marginLeft: 6 }, children: '● on' })] }),
       h('select', { 'aria-label': 'Alert me about', value: w.kind, disabled: w.active, onChange: e => ctrl.watch.configure({ ...w, kind: e.target.value }),
         style: { ...field, flex: '1 1 120px', minWidth: 0 }, children: Object.entries(WATCH_KINDS).map(([value, name]) => h('option', { value, children: name }, value)) }),
       w.kind === 'iv' && h('input', { 'aria-label': 'Minimum IV %', type: 'number', min: 0, max: 100, step: 1, value: w.minIV, disabled: w.active,
@@ -651,7 +654,7 @@ function CatchSummary({ ctrl, c, p, center, sid, place, inPane = false }) {
       !gone && rank && h('div', { style: { color: c.green, fontSize: 12, marginTop: inPane ? 5 : 8 }, children: rank }),
       !gone && hs('div', { style: { ...rowStyle, marginTop: inPane ? 10 : 14 }, children: [
         h(Button, { c, primary: true, style: { padding: inPane ? '7px 14px' : '10px 16px', fontSize: 13 }, disabled: !safeMapUrl(p.map_url), onClick: () => openMap(ctrl.ctx, p.map_url), children: 'Open live map ↗' }),
-        !inPane && h(Button, { c, style: { padding: '10px 16px', fontSize: 13 }, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Show on map' })
+        !inPane && h(Button, { c, style: { padding: '10px 16px', fontSize: 13 }, onClick: () => showInRadar(ctrl, sid, p, center, place), children: 'Open Radar' })
       ] })
     ] }),
     !inPane && h(Compass, { c, d, place, timer, verified })
@@ -896,11 +899,11 @@ function RadarPane({ ctrl, sessionId }) {
           selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
           live.length > 1 && h('div', { 'aria-label': watching ? 'Catches on watch' : 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
             children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, isNew: fresh.has(p.observation_id), selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) }),
-          h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open full map ↗' })
+          !selected && h(Button, { c, style: { width: '100%', marginTop: 12 }, onClick: () => openMap(ctrl.ctx, mapUrl(s.center, s.radius)), children: 'Open live map ↗' })
         ] })
       ] }),
-      h(FollowUps, { ctrl, c, sid }),
-      h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label })
+      h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label }),
+      h(FollowUps, { ctrl, c, sid })
     ] }),
     hs('p', { style: { ...fine(c), fontSize: 11, marginTop: 16, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }, children: [
       h('span', { children: 'The pin is the place you asked about, not your GPS. The Radar never starts a scan.' }),

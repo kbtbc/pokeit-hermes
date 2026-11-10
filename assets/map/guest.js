@@ -121,8 +121,8 @@
     }
     var title = str(p.name, 40) + (num(p.iv) ? ' · ' + Math.round(p.iv * 10) / 10 + '% IV' : '');
     var m = L.marker([p.lat, p.lon], { title: '', alt: title, zIndexOffset: big ? 200 : 0,
-      icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: big ? [52, 52] : [19, 19], iconAnchor: big ? [26, 26] : [9.5, 9.5] }) });
-    m.bindTooltip(title, { direction: 'top', offset: [0, big ? -24 : -8] });
+      icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: big ? [46, 46] : [19, 19], iconAnchor: big ? [23, 23] : [9.5, 9.5] }) });
+    m.bindTooltip(title, { direction: 'top', offset: [0, big ? -21 : -8] });
     m.on('click', function (e) { L.DomEvent.stopPropagation(e); choose(p.id); });
     m.addTo(layer);
     markers.set(p.id, { marker: m, el: el, big: big, expires: num(p.expires) ? p.expires : null, verified: p.verified === true });

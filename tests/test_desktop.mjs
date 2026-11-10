@@ -122,16 +122,16 @@ test('standalone Radar follow-ups include the named place and precise map pin', 
   const s = { center: { lat: 34.0746, lon: -84.2922 }, label: 'Alpharetta City Hall', radius: 500, observations: [{ name: 'Rattata' }] };
   const raids = ui.followUpQuestion('raids', s);
   assert.match(raids, /Alpharetta City Hall/);
-  assert.match(raids, /https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
+  assert.doesNotMatch(raids, /https:/);                                  // a named place resolves by itself
   assert.match(raids, /Keep eggs separate/);
-  assert.match(ui.followUpQuestion('events', s), /Rattata useful today/);
+  assert.equal(ui.followUpQuestion('events', s), 'What events are on today, and do they matter for the spawns near Alpharetta City Hall?');
+  assert.match(ui.followUpQuestion('raids', { ...s, label: 'Search point' }), /near this map pin\? Keep eggs separate\. Use this search area: https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
   assert.equal(ui.followUpQuestion('raids', { center: null }), null);
 });
-test('the catches follow-up asks for cards by name, so a chat started from the Radar shows them', () => {
+test('the catches follow-up is a plain question: cards stay opt-in, so the chat is not filled with large cards', () => {
   const s = { center: { lat: 34.0746, lon: -84.2922 }, label: 'Alpharetta City Hall', radius: 500, observations: [] };
   const q = ui.followUpQuestion('catches', s);
-  assert.match(q, /What is worth catching near Alpharetta City Hall\? Show PokeIt cards\./);
-  assert.match(q, /https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
+  assert.equal(q, "What's worth catching near Alpharetta City Hall right now?");
   assert.equal(ui.followUpQuestion('catches', { center: null }), null);
 });
 test('a Radar button replaces the question the last button wrote and keeps what the player typed', async () => {
