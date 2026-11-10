@@ -408,9 +408,21 @@ export function createController(ctx) {
   return controller;
 }
 function useRadar(ctrl, sid) { useValue(ctrl.revision); return ctrl.state(sid); }
-async function draft(textValue, sid = null) {
-  const ok = await host.composer.insertText(sid, textValue, { mode: 'block' });
-  if (!ok) host.notify({ kind: 'warning', message: 'Open this chat to add the question.' });
+// A Radar button writes its question into the chat bar. The next button replaces the question the last one wrote,
+// so questions never stack; anything the player typed themselves stays where it is.
+const seeded = new Map();
+export async function draft(textValue, sid = null) {
+  const key = sid ?? '', previous = seeded.get(key)?.trim();
+  let ok = false;
+  if (previous && typeof host.composer.getDraft === 'function') {
+    const current = ((await host.composer.getDraft(sid).catch(() => null)) ?? '').trimEnd();
+    if (current.endsWith(previous)) {
+      const rest = current.slice(0, current.length - previous.length).trimEnd();
+      ok = await host.composer.setDraft(sid, rest ? rest + '\n\n' + textValue : textValue);
+    }
+  }
+  if (!ok) ok = await host.composer.insertText(sid, textValue, { mode: 'block' });
+  if (ok) seeded.set(key, textValue); else host.notify({ kind: 'warning', message: 'Open this chat to add the question.' });
 }
 // The map docks beside the chat. Once the player closes it, answers stop reopening it until they ask for it again.
 let closedByPlayer = false;

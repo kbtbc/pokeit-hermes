@@ -131,6 +131,28 @@ test('the catches follow-up asks for cards by name, so a chat started from the R
   assert.match(q, /https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
   assert.equal(ui.followUpQuestion('catches', { center: null }), null);
 });
+test('a Radar button replaces the question the last button wrote and keeps what the player typed', async () => {
+  let text = '';
+  host.composer = {
+    getDraft: async () => text,
+    setDraft: async (sid, next) => { text = next; return true; },
+    insertText: async (sid, next) => { text = text ? text + '\n\n' + next : next; return true; }
+  };
+  await ui.draft('Best catches near A?', 'draft-a');
+  await ui.draft('Raids near A?', 'draft-a');
+  await ui.draft('Gyms near A?', 'draft-a');
+  assert.equal(text, 'Gyms near A?');
+  text = 'my own note\n\n' + text;
+  await ui.draft('Events near A?', 'draft-a');
+  assert.equal(text, 'my own note\n\nEvents near A?');
+  text = '';
+  await ui.draft('Raids near A?', 'draft-a');
+  assert.equal(text, 'Raids near A?');
+  text = 'typed after\n\n' + text + ' and more';
+  await ui.draft('Gyms near A?', 'draft-a');
+  assert.match(text, /and more\n\nGyms near A\?$/);
+  delete host.composer;
+});
 test('an unreachable backend still leaves a card with a place, a distance and a map link', () => {
   const args = ui.catchAttributes({ id: 'pid_offline', lat: '34.0752', lon: '-84.2900', origin_lat: '34.0746349', origin_lon: '-84.2922705' });
   const withOrigin = ui.offlineCatch(args, 'Alpharetta City Hall');
