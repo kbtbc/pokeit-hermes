@@ -304,14 +304,14 @@ test('watch starts only on request, aggregates and dedupes observations, throttl
   f.dispose();
 });
 
-test('the toast leads with the catch, then where and when, how long it lasts and a map link', () => {
+test('the toast leads with the catch, then where and when and how long it lasts, with no URL', () => {
   const found = Date.parse('2026-11-09T19:30:00');
   const one = ui.watchToast([{ ...match('toast'), name: 'Skwovet', iv_percent: 91.11, lat: 33.7601, lon: -84.3934, expires_at: '2026-11-09T19:48:00', expiry_verified: true }], 'Centennial Olympic Park, Atlanta', found);
   assert.equal(one.title, 'PokeIt! Nearby Skwovet (91.1%)');
   const lines = one.body.split(/\r?\n/);
   assert.match(lines[0], /^Found near Centennial Olympic Park, Atlanta @ 7:30/);
   assert.match(lines[1], /^Expires: 7:48/); assert.doesNotMatch(lines[1], /estimated/);
-  assert.match(lines[2], /^https:\/\/pokeit\.cc\/map\?lat=33\.7601&lon=-84\.3934/);
+  assert.equal(lines[2], 'Click to open it in the PokeIt Radar.'); assert.doesNotMatch(one.body, /https?:/);
   const many = ui.watchToast([match('a'), match('b'), match('c')], 'Park', found);
   assert.match(many.title, /\+2 more$/);
   assert.match(ui.watchToast([{ ...match('guess'), expiry_verified: false }], 'Park', found).body, /Expires: .* \(estimated\)/);

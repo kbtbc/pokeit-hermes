@@ -6,7 +6,7 @@
 - README: restart Hermes after an install or update. A Desktop that was not restarted can open chats without the PokeIt tools, and the Radar cannot follow those. The skill now tells the agent to say so instead of reaching the service another way.
 - Fix: after a scan the agent reads 371 m but the Radar read 500 m, so the two listed different catches. The Radar now reads the ring the agent read and offers it in the Ring menu.
 - Fix: "A scan is in progress here" stayed on the Radar after the scan had finished. It now clears by itself.
-- Hunt Watch sits under the map in its own panel, says what it is watching for, and no longer prints a bare map link in the pane (the desktop alert keeps it).
+- Hunt Watch sits under the map in its own panel, says what it is watching for, and no longer prints a bare map link. The desktop alert drops the link too: clicking it opens the catch in the Radar.
 - Radar buttons write a short question. A named place no longer carries a map link, **Best catches** no longer asks for catch cards (ask for "PokeIt cards" to get them), and **Events today** asks about today's events for the spawns at the spot. The Radar has one **Open live map** button; the chat card's second button is **Open Radar**.
 - Map icons are a little smaller and the map leaves room for icons that sit on the ring. Timers in the list say "left". The footer is one quiet line.
 - The skill keeps the service's order for the catch list, so the chat and the Radar agree more often.

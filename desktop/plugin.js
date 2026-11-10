@@ -177,14 +177,13 @@ function useActiveSession() {
 const WATCH_KINDS = { highlights: 'Highlights', hundo: 'Hundos', nundo: 'Nundos', pvp: 'PvP rank #1', iv: 'IV at least' };
 const WATCH_LIMIT_MS = 2 * 60 * 60 * 1000;
 const clockTime = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-// The toast leads with what was found, then where and when, how long it lasts, and a map link for the first catch.
+// The toast leads with what was found, then where and when, and how long it lasts. No URL: clicking it opens the catch in the Radar.
 export function watchToast(fresh, label, foundAt) {
   const first = fresh[0], end = Date.parse(first?.expires_at);
   const iv = number(first?.iv_percent) ? `${Number(first.iv_percent.toFixed(1))}%` : 'IV unknown';
   const title = `PokeIt! Nearby ${text(first?.name, 35) || 'a catch'} (${iv})${fresh.length > 1 ? ` +${fresh.length - 1} more` : ''}`;
   const expires = Number.isFinite(end) ? `${clockTime(end)}${first.expiry_verified === true ? '' : ' (estimated)'}` : 'time unknown';
-  const link = number(first?.lat) && number(first?.lon) ? '\n' + mapUrl({ lat: first.lat, lon: first.lon }, 250) : '';
-  return { title, body: `Found near ${label} @ ${clockTime(foundAt)}\nExpires: ${expires}${link}` };
+  return { title, body: `Found near ${label} @ ${clockTime(foundAt)}\nExpires: ${expires}\nClick to open it in the PokeIt Radar.` };
 }
 function watchScope() { return JSON.stringify([host.state.connectionId?.get() || 'local', host.state.profile.get() || 'default']); }
 function watchPrefs(value) {
@@ -271,8 +270,8 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
       for (const p of fresh) run.seen.add(p.observation_id);
       while (run.seen.size > 1024) run.seen.delete(run.seen.values().next().value);
       const { title, body } = watchToast(fresh, run.label, now());
-      const plain = `${title}. ${body.replace(/\n/g, '. ')}`;
-      patch({ notice: `${title}. ${body.split('\n').slice(0, 2).join('. ')}` });  // the pane lists the catch itself, so no link line here
+      const plain = `${title}. ${body.split('\n').slice(0, 2).join('. ')}`;  // in the app the catch is already on screen, so no "click to open" line
+      patch({ notice: plain });
       clearBubble?.(); clearBubble = ctx.pet?.say(plain, { id: 'hunt-watch', tone: 'info', ttlMs: 10000 });
       host.notify({ kind: 'info', message: plain });
       // Hosts may deliver through an asynchronous bridge. A notification failure is not a failed data read.
