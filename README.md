@@ -7,19 +7,21 @@
 
 **Live Pokémon GO data for your Hermes agent.** Hundos, raids, showcases and events near any spot, from a real scanning network. No account, no API key.
 
-![A PokeIt catch card in Hermes Desktop: Cubone with IV bars, a compass, a live countdown and a walking guide](assets/desktop-card.png)
+![Hermes Desktop: a PokeIt answer in chat with the PokeIt Radar beside it, showing a hundo Sudowoodo near Alpharetta City Hall](assets/desktop-radar.webp)
 
-*A catch card in Hermes Desktop, from a real scan at the Charging Bull in New York.*
+*Hermes Desktop: the answer in chat, and the Radar following it with the featured catch, a map, gyms, Pokéstops and Hunt Watch. Live data near Alpharetta City Hall.*
 
-## Try it
+## Install
 
 ```sh
 hermes plugins install kbtbc/pokeit-hermes
 ```
 
-To update later: `hermes plugins update pokeit`. (Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.)
+On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead. Then start a fresh chat (Desktop: restart the app). Update with `hermes plugins update pokeit`. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
 
-Then ask:
+## Try it
+
+Ask:
 
 > Any hundos or rank-one PvP catches near Alpharetta City Hall?
 >
@@ -43,8 +45,6 @@ Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering
 - **It works without Desktop.** On the CLI and in chat apps you get the same tools and answers, with plain map links.
 
 ## Hermes Desktop
-
-On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`.
 
 The **PokeIt Radar** opens beside the chat by itself after a catch search and follows it. It reads the same spot, lists the best three or four catches (hundos, nundos and PvP #1 first, then the highest IV) and shows them on a map with the gyms and Pokéstops around. There is no search box: ask in chat. Close the Radar and it stays closed until you open **PokeIt Radar** from the status bar. The buttons under the map (**Best catches**, **Raids nearby**, **Open gyms**, **Events today**) put a ready question in the chat bar, replacing the question the last button wrote and leaving anything you typed. Ask for "PokeIt cards", or press **Best catches**, to get catch cards in the chat. Catch cards show the species art, IVs, a compass to the catch, a live countdown and a walking guide, a straight line at 5 km/h from the place you searched rather than from you. Scan cards fill a progress ring as points are confirmed. New scans still use the agent's approval prompt.
 
