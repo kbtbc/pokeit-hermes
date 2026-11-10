@@ -33,7 +33,7 @@ Give a specific spot: an address, an intersection or a landmark. Your agent does
 
 Hermes calls the hosted PokeIt MCP server, which answers from observations on the public map. There is no language model inside the server.
 
-Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. The prompt calls PokeIt an "untrusted server" and the scan tool "write-capable": that is how Hermes labels any tool that can change something outside your machine, and PokeIt declares it on purpose. Choose **Run**, or **Always allow** to skip the prompt next time. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart. The [coverage map](https://pokeit.cc/coverage) shows where scanning is ongoing.
+Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart.
 
 ## Why a plugin, not just a skill
 
@@ -71,8 +71,7 @@ The Desktop installer adds the interface locally and the backend to your selecte
 - This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
-- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app. When a watch starts, the Radar sends the spot's coordinates to PokeIt's coverage check to learn whether scanning is ongoing there.
-- The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
+- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.- The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
 
 ## If the tools disappear
 
