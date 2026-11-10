@@ -1,5 +1,9 @@
 # PokeIt release notes
 
+## 0.1.23 · November 10, 2026 (ET)
+
+- The Radar says less: the "limited sample" sentence under the watch is gone, and "never starts a scan" no longer repeats in the footer and the watch panel (it is in the watch line's tooltip and the README).
+
 ## 0.1.22 · November 10, 2026 (ET)
 
 - Fix: after a raid question, a scan at a new place kept the old place's raid list on the Radar under the new place's name. A scan now starts the Radar clean.

@@ -3,7 +3,7 @@ import * as sdk from '@hermes/plugin-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.22';
+const VERSION = '0.1.23';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -605,13 +605,12 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
       h(Button, { c, primary: !w.active, disabled: !w.active && !center, onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop' : 'Watch' })
     ] }),
     h('p', { role: 'status', style: { ...fine(c), margin: '8px 0 0', fontSize: w.active || w.busy ? 12 : 13, color: w.active || w.busy ? c.muted : c.fg }, children: status }),
-    !w.active && !w.busy && h('p', { style: { ...fine(c), margin: '3px 0 0', fontSize: 11 }, children: 'Checks once a minute for 2 hours. Never starts a scan.' }),
+    !w.active && !w.busy && h('p', { title: 'Watch reads what PokeIt scans have already found. It never starts a scan.', style: { ...fine(c), margin: '3px 0 0', fontSize: 11 }, children: 'Checks once a minute for two hours.' }),
     w.active && w.scanNote && hs('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'ongoing' ? c.muted : c.accent }, children: [w.scanNote,
       w.scan === 'none' && h('button', { type: 'button', onClick: () => openMap(ctrl.ctx, 'https://pokeit.cc/coverage'),
         style: { background: 'none', border: 0, padding: 0, marginLeft: 6, color: c.accent, font: 'inherit', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }, children: 'See covered areas ↗' })] }),
     w.error && h(ErrorNote, { c, message: w.error }),
-    w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
-    w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' })
+    w.notificationNote && h('p', { style: fine(c), children: w.notificationNote })
   ] });
 }
 function Pips({ c, value }) {
@@ -987,7 +986,7 @@ function RadarPane({ ctrl, sessionId }) {
       h(FollowUps, { ctrl, c, sid })
     ] }),
     hs('p', { style: { ...fine(c), fontSize: 11, marginTop: 16, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }, children: [
-      h('span', { children: 'The pin is the place you asked about, not your GPS. The Radar never starts a scan.' }),
+      h('span', { children: 'The pin is the place you asked about, not your GPS.' }),
       h('button', { type: 'button', onClick: () => void ctrl.debug(), style: { background: 'none', border: 0, padding: 0, color: c.muted, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }, children: 'Copy debug info' })] })
   ] });
 }
