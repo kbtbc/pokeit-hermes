@@ -15,7 +15,8 @@ const RADII = [100, 250, 500, 1000, 2000];
 // The agent can read at another radius (371 m after a scan). The Radar must read the same ring or its list differs from the chat's.
 export const radiusOf = n => Number.isFinite(n) && n >= 50 && n <= 2000 ? Math.round(n) : 500;
 const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
-const EXAMPLES = ['the Georgia Aquarium in Atlanta', 'Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
+// The first example sits inside ongoing coverage, so it answers at once. The others need a scan, which Hermes asks the player to approve.
+const EXAMPLES = [['the Georgia Aquarium in Atlanta', 'live now'], ['Bethesda Terrace in Central Park, New York', 'fresh scan'], ['Pike Place Market, Seattle', 'fresh scan']];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0, scan: null });
@@ -557,7 +558,7 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
   const w = useValue(ctrl.watch.view);
   const field = { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: '7px 8px', font: `12px ${font}` };
   const status = w.busy ? 'Checking existing observations…'
-    : w.active ? `Watching ${w.label} · 500 m. ${w.notice}` : w.notice || 'Alerts you to new catches at this spot. It reads existing data about once a minute, never starts a scan, and stops by itself after 2 hours.';
+    : w.active ? `Watching ${w.label} · 500 m. ${w.notice}` : w.notice || 'Get an alert when a new match appears here. Checks once a minute for 2 hours and never starts a scan.';
   return hs('section', { 'aria-label': 'Hunt Watch', style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${c.line}` }, children: [
     hs('div', { style: { ...rowStyle, gap: 6 }, children: [
       h('strong', { style: { fontSize: 12, marginRight: 4 }, children: 'Hunt Watch' }),
@@ -771,7 +772,7 @@ function ResultRow({ ctrl, c, p, center, selected, now, onSelect, isNew = false 
       h('strong', { style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: text(p.name, 60) || 'Pokémon' }),
       hs('span', { style: fine(c), children: [isNew && h('b', { style: { color: c.accent }, children: 'New · ' }), [metric(p), hl?.label, d && `${amount(d.meters)} ${d.direction}`].filter(Boolean).join(' · ')] })
     ] }),
-    h('span', { style: { fontVariantNumeric: 'tabular-nums', fontSize: 12, color: timer.low ? c.red : c.muted }, children: timer.seconds > 0 ? timer.label : '' })
+    h('span', { style: { fontVariantNumeric: 'tabular-nums', fontSize: 12, color: timer.low ? c.red : c.muted }, children: timer.seconds > 0 ? timer.label + ' left' : '' })
   ] });
 }
 // A read this old may show catches that have despawned; the pane refreshes it when it is shown again.
@@ -864,9 +865,11 @@ function RadarPane({ ctrl, sessionId }) {
     !s.center ? hs('div', { style: { textAlign: 'center', marginTop: 8 }, children: [
       h(RadarSvg, { ctrl, c, s, sid, ghost: true }),
       h('p', { style: { margin: '6px 0 4px', fontSize: 15, fontWeight: 650 }, children: 'Ask Hermes about a place.' }),
-      h('p', { style: fine(c), children: 'The map opens beside the answer and follows it. Try one of these in chat:' }),
+      h('p', { style: fine(c), children: 'The map opens beside the answer and follows it. Pick one to put it in the chat bar:' }),
       hs('div', { style: { display: 'grid', gap: 6, marginTop: 8 }, children: [
-        ...EXAMPLES.map(spot => h(Button, { c, style: { textAlign: 'left' }, onClick: () => void draft(`What's worth catching near ${spot}?`, sid), children: `What's worth catching near ${spot}?` }, spot)),
+        ...EXAMPLES.map(([spot, kind]) => hs(Button, { c, style: { textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }, onClick: () => void draft(`What's worth catching near ${spot}?`, sid), children: [
+          h('span', { children: `What's worth catching near ${spot}?` }),
+          h('span', { style: { font: `600 11px ${font}`, color: kind === 'live now' ? c.accent : c.muted, whiteSpace: 'nowrap' }, children: kind })] }, spot)),
         last && h(Button, { c, style: { textAlign: 'left' }, disabled: s.busy, onClick: () => void ctrl.read(sid, last.center, last.label, last.radius), children: `Back to ${last.label}` })
       ] })
     ] }) : hs('div', { children: [
@@ -899,8 +902,9 @@ function RadarPane({ ctrl, sessionId }) {
       h(FollowUps, { ctrl, c, sid }),
       h(HuntWatch, { ctrl, c, sid, center: s.center, label: s.label })
     ] }),
-    h('p', { style: { ...fine(c), marginTop: 16 }, children: 'The pin is the search point, not your live GPS position. No new scans start in this pane.' }),
-    h(Button, { c, style: { background: 'transparent', fontSize: 11 }, onClick: () => void ctrl.debug(), children: 'Copy debug info' })
+    hs('p', { style: { ...fine(c), fontSize: 11, marginTop: 16, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }, children: [
+      h('span', { children: 'The pin is the place you asked about, not your GPS. The Radar never starts a scan.' }),
+      h('button', { type: 'button', onClick: () => void ctrl.debug(), style: { background: 'none', border: 0, padding: 0, color: c.muted, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }, children: 'Copy debug info' })] })
   ] });
 }
 function Skeleton({ c, label }) {

@@ -34,7 +34,7 @@
   var fortLayer = L.layerGroup().addTo(map), layer = L.layerGroup().addTo(map);
 
   function ringBounds() { return L.latLng(state.center.lat, state.center.lon).toBounds(state.radius * 2); }
-  function fit() { if (state && state.center) { userMoved = false; map.fitBounds(ringBounds(), { padding: [14, 14], animate: false }); } }
+  function fit() { if (state && state.center) { userMoved = false; map.fitBounds(ringBounds(), { padding: [30, 30], animate: false }); } }
   var Fit = L.Control.extend({ options: { position: 'bottomright' }, onAdd: function () {
     var bar = L.DomUtil.create('div', 'leaflet-bar'), b = L.DomUtil.create('button', 'fit-control', bar);
     b.type = 'button'; b.textContent = 'FIT'; b.title = 'Show the whole search area'; b.style.borderTop = '0';
