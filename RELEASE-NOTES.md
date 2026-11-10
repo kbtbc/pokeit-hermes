@@ -4,6 +4,7 @@
 
 - The Radar now follows raid, gym, showcase, Max Battle and PokéStop questions as well as catches; **Raids nearby** asks for raids and eggs right now, and the line under the map counts the raids on the gyms shown.
 - A raid question turns the Radar to raids: bosses and eggs lead on the map and in a list with the gym, distance, open slots and time left, and catches step back to small faded icons. A catch question turns it back.
+- Fix: after a plugin update the Radar's map could stay on the old version until the gateway restarted, because the map page was built once per process. It is rebuilt when its files change.
 - Catch icons on the map are a little smaller again, and the long tail of a watch list is drawn small. The no-ongoing-scans warning links to the coverage map.
 - "Hunt Watch" is now **Watch it**: the status bar says "PokeIt · Watching" while it runs. README rewritten around "near me", the Radar and desktop alerts.
 - The sample questions use the Georgia Aquarium in Atlanta and the Gateway Arch in St. Louis. The empty Radar's examples say which ones answer at once ("live now") and which need a scan ("fresh scan").

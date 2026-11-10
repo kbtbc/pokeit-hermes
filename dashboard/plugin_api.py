@@ -200,9 +200,16 @@ def map_document():
     already read. Nothing here comes from a request, and the page loads no scripts or styles
     from the network. Its CSP allows only map tiles and PokeIt species icons.
     """
-    if not _map_document:
+    # Built once, and again when the files change: a plugin update must not leave a long-running gateway serving the old map.
+    names = ("leaflet.css", "guest.css", "leaflet.js", "guest.js")
+    try:
+        stamp = tuple((MAP_DIR / name).stat().st_mtime_ns for name in names)
+    except OSError:
+        stamp = None
+    if not _map_document or _map_document[1] != stamp:
+        _map_document.clear()
         try:
-            part = {name: (MAP_DIR / name).read_text(encoding="utf-8") for name in ("leaflet.css", "guest.css", "leaflet.js", "guest.js")}
+            part = {name: (MAP_DIR / name).read_text(encoding="utf-8") for name in names}
         except OSError:
             raise ProxyError("map_unavailable", "The map viewer files are missing from this install.") from None
         if any("</script" in part[n].lower() for n in ("leaflet.js", "guest.js")) or any("</style" in part[n].lower() for n in ("leaflet.css", "guest.css")):
@@ -215,6 +222,7 @@ def map_document():
             '<body><div id="map"></div><div id="note" role="status"></div>'
             f'<script id="state" type="application/json">{MAP_STATE_SLOT}</script>'
             f'<script>{part["leaflet.js"]}</script><script>{part["guest.js"]}</script></body></html>')
+        _map_document.append(stamp)
     return {"document": _map_document[0], "state_slot": MAP_STATE_SLOT}, {"cached": True}
 
 
