@@ -94,11 +94,12 @@
     };
     stops.forEach(function (f) { add(f, false); }); gyms.forEach(function (f) { add(f, true); });
   }
-  function art(p) {
+  function art(p, big) {
     var img = document.createElement('img'), tried = 0;
     img.alt = ''; img.draggable = false; img.decoding = 'async';
-    var base = ICONS + p.pokemon_id + '.webp?w=64';
-    img.src = p.form ? ICONS + p.pokemon_id + '_f' + p.form + '.webp?w=64' : base;
+    // Large icons take the full-size art: the 64 px thumbnail is stretched on a high-DPI screen and looks soft.
+    var size = big ? '' : '?w=64', base = ICONS + p.pokemon_id + '.webp' + size;
+    img.src = p.form ? ICONS + p.pokemon_id + '_f' + p.form + '.webp' + size : base;
     img.addEventListener('error', function () {
       // form icon -> base species -> a lettered badge
       if (p.form && !tried) { tried = 1; img.src = base; return; }
@@ -112,7 +113,7 @@
     var el = document.createElement('div');
     {
       el.className = 'pin' + (big ? '' : ' pin--small') + (known.size && !known.has(p.id) ? ' is-new' : '');
-      el.appendChild(art(p));
+      el.appendChild(art(p, big));
       if (p.tag && big) {
         var tag = document.createElement('span');
         tag.className = 'pin__tag' + (p.tag === 'PvP #1' ? ' pin__tag--pvp' : p.tag === 'Nundo' ? ' pin__tag--nundo' : '');
@@ -132,8 +133,8 @@
     var el = document.createElement('div'), img = document.createElement('img'), tried = 0;
     el.className = 'pin pin--raid';
     img.alt = ''; img.draggable = false; img.decoding = 'async';
-    var egg = 'https://pokeit.cc/assets/bigfunOutline/raid/egg/' + (r.level || 1) + '.webp?w=64', base = ICONS + r.pokemon_id + '.webp?w=64';
-    img.src = !r.pokemon_id ? egg : r.form ? ICONS + r.pokemon_id + '_f' + r.form + '.webp?w=64' : base;
+    var egg = 'https://pokeit.cc/assets/bigfunOutline/raid/egg/' + (r.level || 1) + '.webp', base = ICONS + r.pokemon_id + '.webp';
+    img.src = !r.pokemon_id ? egg : r.form ? ICONS + r.pokemon_id + '_f' + r.form + '.webp' : base;
     img.addEventListener('error', function () {
       if (r.pokemon_id && r.form && !tried) { tried = 1; img.src = base; return; }
       if (tried < 2) { tried = 2; img.src = egg; }
