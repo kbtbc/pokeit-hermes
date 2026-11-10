@@ -476,7 +476,8 @@ export function createController(ctx) {
       const covered = plan && ['fresh', 'existing_coverage'].includes(plan.status);
       const seen = !!(state(sid).scan?.seen || (plan && plan.status !== 'needs_scan') || done > 0 && done < total);
       const age = Date.now() - startedAt;
-      if (covered || age > SCAN_GIVE_UP_MS || (!seen && age > SCAN_START_GRACE_MS)) { finish(); return; }
+      // The last few points can lag for a minute; 45 of 49 is enough to show the spot.
+      if (covered || (seen && done >= total - 4) || age > SCAN_GIVE_UP_MS || (!seen && age > SCAN_START_GRACE_MS)) { finish(); return; }
       update(sid, { scan: { done, total, since: startedAt, seen } });
       ctx.setTimeout(tick, SCAN_POLL_MS);
     };

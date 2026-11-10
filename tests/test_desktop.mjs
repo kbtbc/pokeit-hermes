@@ -556,6 +556,19 @@ test('a scan that never shows up (the player declined) stops quietly and the spo
   host.state.focusedStoredSessionId.set('test'); host.state.focusedSessionId.set('test');
 });
 
+test('a scan with 45 of 49 points in is read without waiting for the last ones', async () => {
+  host.openWorkspace = () => {};
+  const paths = [];
+  const f = followHarness(async path => { paths.push(path);
+    return { ok: true, data: path.startsWith('/coverage') ? { scan_plan: { status: 'in_progress', total_points: 49, counts: { existing_area: 5, fresh: 40 } } }
+      : path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-10T06:00:00Z' } : {} }; });
+  f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__request_scan', args: { lat: 40.7055641, lon: -74.0134436, radius_m: 371 } } });
+  assert.equal(paths.some(p => p.startsWith('/nearby')), false);
+  await f.timeouts.shift().cb(); await flush();
+  assert.equal(paths.some(p => p.startsWith('/nearby')), true);
+  assert.equal(f.ctrl.state('test').scan, null);
+});
+
 test('the scan line counts points and offers the partial read only after four minutes', () => {
   assert.equal(ui.scanLine(null, 0), null);
   assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).text, '46 of 49 points');

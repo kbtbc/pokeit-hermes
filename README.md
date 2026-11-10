@@ -13,6 +13,8 @@
 
 ## Install
 
+Needs Hermes Agent 0.23.0 or newer (`hermes --version`; update with `hermes update`).
+
 ```sh
 hermes plugins install kbtbc/pokeit-hermes
 ```
