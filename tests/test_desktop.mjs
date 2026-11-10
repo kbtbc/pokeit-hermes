@@ -123,9 +123,9 @@ test('standalone Radar follow-ups include the named place and precise map pin', 
   const raids = ui.followUpQuestion('raids', s);
   assert.match(raids, /Alpharetta City Hall/);
   assert.doesNotMatch(raids, /https:/);                                  // a named place resolves by itself
-  assert.equal(raids, 'What raids and eggs are on near Alpharetta City Hall right now?');
+  assert.equal(raids, 'What raids and eggs are near Alpharetta City Hall right now?');
   assert.equal(ui.followUpQuestion('events', s), 'What events are on today, and do they matter for the spawns near Alpharetta City Hall?');
-  assert.match(ui.followUpQuestion('raids', { ...s, label: 'Search point' }), /What raids and eggs are on near this map pin right now\? Use this search area: https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
+  assert.match(ui.followUpQuestion('raids', { ...s, label: 'Search point' }), /What raids and eggs are near this map pin right now\? Use this search area: https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
   assert.equal(ui.followUpQuestion('raids', { center: null }), null);
 });
 test('the catches follow-up is a plain question: cards stay opt-in, so the chat is not filled with large cards', () => {

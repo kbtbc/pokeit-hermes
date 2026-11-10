@@ -224,8 +224,8 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
   function expire(run) {
     if (current !== run) return;
     stop(`Watch ended after ${WATCH_LIMIT_MS / 3600000} hours. Press Watch to keep going.`);
-    host.notify({ kind: 'info', message: `PokeIt Hunt Watch near ${run.label} ended after ${WATCH_LIMIT_MS / 3600000} hours.` });
-    void Promise.resolve().then(() => ctx.os?.notify?.({ title: 'PokeIt! Hunt Watch ended',
+    host.notify({ kind: 'info', message: `PokeIt stopped watching near ${run.label} after ${WATCH_LIMIT_MS / 3600000} hours.` });
+    void Promise.resolve().then(() => ctx.os?.notify?.({ title: 'PokeIt! Watch ended',
       body: `Stopped after ${WATCH_LIMIT_MS / 3600000} hours near ${run.label}. Open the PokeIt Radar to start it again.` })).catch(() => {});
   }
   // The watch only reads what scans have already found. Where no ongoing scan covers the spot it can see nothing new, so say so.
@@ -556,7 +556,7 @@ export function followUpQuestion(kind, s) {
   const named = !!s.label && !['Choose a spot', 'Search point'].includes(s.label);
   const place = named ? `near ${s.label}` : 'near this map pin';
   const question = kind === 'catches' ? `What's worth catching ${place} right now?`
-    : kind === 'raids' ? `What raids and eggs are on ${place} right now?`
+    : kind === 'raids' ? `What raids and eggs are ${place} right now?`
     : kind === 'gyms' ? `Which gyms ${place} have open slots?`
     : `What events are on today, and do they matter for the spawns ${place}?`;
   // A named place resolves by itself. Only a bare pin needs its link, so the agent reads the same point.
@@ -578,7 +578,7 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
   const status = w.busy ? 'Checking existing observations…'
     : w.active ? `Watching ${w.label} for ${what}, within 500 m. ${w.notice}`
       : w.notice || 'Set it and get on with your work. A desktop alert tells you when a match appears within 500 m.';
-  return hs('section', { 'aria-label': 'Hunt Watch', style: { ...panel(c), marginTop: 14, padding: 12, borderColor: w.active ? c.accent : c.line }, children: [
+  return hs('section', { 'aria-label': 'Watch it: desktop notifications', style: { ...panel(c), marginTop: 14, padding: 12, borderColor: w.active ? c.accent : c.line }, children: [
     hs('div', { style: { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 6, marginBottom: 8 }, children: [
       h('strong', { style: { fontSize: 16, fontWeight: 800 }, children: 'Watch it' }),
       h('span', { style: { fontSize: 13, fontWeight: 600, color: c.accent }, children: '· Real-Time Desktop Notifications!' }),
@@ -881,7 +881,8 @@ function RadarPane({ ctrl, sessionId }) {
   const next = watching && w.lastChecked ? Math.max(0, 60 - Math.floor((now - w.lastChecked) / 1000)) : null;
   const notice = radarNotice({ busy: s.busy, queriedAt: s.queriedAt, quietPick: s.quietPick, watching, shown, live, ageSeconds: age });
   const stale = !watching && age !== null && age >= STALE_AFTER_S;
-  const landmarks = [s.gyms.length && `${s.gyms.length} ${s.gyms.length === 1 ? 'gym' : 'gyms'}`, s.stops.length && `${s.stops.length} Pokéstops`].filter(Boolean).join(' · ');
+  const raids = s.gyms.filter(g => g?.raid === true).length;
+  const landmarks = [s.gyms.length && `${s.gyms.length} ${s.gyms.length === 1 ? 'gym' : 'gyms'}`, raids && `${raids} ${raids === 1 ? 'raid' : 'raids'}`, s.stops.length && `${s.stops.length} Pokéstops`].filter(Boolean).join(' · ');
   return hs('section', { 'aria-label': 'PokeIt Radar', style: { background: c.surface, color: c.fg, padding: 14, overflowY: 'auto', height: '100%', fontFamily: font, boxSizing: 'border-box' }, children: [
     h(Styles, {}),
     hs('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }, children: [
@@ -1045,7 +1046,7 @@ function StatusChip({ ctrl }) {
   const liveCount = s.observations.filter(p => !expiry(p, now).expired).length;
   return h('button', { type: 'button', title: 'Open PokeIt Radar', style: { font: `600 11px ${font}`, cursor: 'pointer', color: 'var(--ui-text-secondary)', background: 'transparent', border: 0, padding: '2px 6px' },
     onClick: () => openRadar(ctrl, sid),
-    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), watch.active ? ' · watching' : s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] }) });
+    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), watch.active ? ' · Watching' : s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] }) });
 }
 
 export default {
