@@ -329,8 +329,17 @@ test('the watch says whether ongoing scans cover the spot, and warns when none d
   const on = watchHarness(async path => path.startsWith('/coverage') ? { areas: ['GA-Atlanta'], scan_plan: { status: 'existing_coverage' } } : { observations: [] });
   on.watch.start('test', watchCenter, 'City Hall'); await flush();
   assert.equal(on.watch.view.get().scan, 'ongoing'); assert.match(on.watch.view.get().scanNote, /Ongoing scans cover this spot \(GA-Atlanta\)/); on.dispose();
+  // The edge of a scanned area: 42 of the 49 scan points inside it is still a scanned spot, although the plan says needs_scan.
+  const edge = watchHarness(async path => path.startsWith('/coverage')
+    ? { areas: ['GA-Alpharetta/Roswell'], scan_plan: { status: 'needs_scan', total_points: 49, counts: { existing_area: 42, needed: 7 } } } : { observations: [] });
+  edge.watch.start('test', watchCenter, 'Avalon'); await flush();
+  assert.equal(edge.watch.view.get().scan, 'ongoing'); edge.dispose();
+  const part = watchHarness(async path => path.startsWith('/coverage')
+    ? { areas: [], scan_plan: { status: 'needs_scan', total_points: 49, counts: { existing_area: 20, needed: 29 } } } : { observations: [] });
+  part.watch.start('test', watchCenter, 'Edge'); await flush();
+  assert.equal(part.watch.view.get().scan, 'partial'); assert.match(part.watch.view.get().scanNote, /only part of this spot/); part.dispose();
   const none = watchHarness(async path => path.startsWith('/coverage')
-    ? { areas: [], scan_plan: { status: 'needs_scan' }, nearest_areas: [{ name: 'PA-Philadelphia', distance_miles: 81.6 }] } : { observations: [] });
+    ? { areas: [], scan_plan: { status: 'needs_scan', total_points: 49, counts: { existing_area: 0, needed: 49 } }, nearest_areas: [{ name: 'PA-Philadelphia', distance_miles: 81.6 }] } : { observations: [] });
   none.watch.start('test', watchCenter, 'City Hall'); await flush();
   assert.equal(none.watch.view.get().scan, 'none');
   assert.match(none.watch.view.get().scanNote, /No ongoing scans cover this spot.*PA-Philadelphia, 81\.6 mi away/);

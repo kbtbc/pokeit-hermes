@@ -227,16 +227,19 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
     try {
       const data = await api('/coverage?' + new URLSearchParams({ lat: run.center.lat, lon: run.center.lon }));
       if (!valid(run)) return;
-      const status = data?.scan_plan?.status;
+      const plan = data?.scan_plan, status = plan?.status;
       if (!status || status === 'unavailable') return;
-      if (status === 'existing_coverage') {
-        const areas = Array.isArray(data.areas) ? data.areas.slice(0, 2).map(a => text(a, 40)).filter(Boolean).join(', ') : '';
-        patch({ scan: 'ongoing', scanNote: `Ongoing scans cover this spot${areas ? ` (${areas})` : ''}.` }); return;
-      }
+      // The plan splits the 371 m footprint into scan points. A spot near the edge of a scanned area can have a few points
+      // outside it and still be scanned: judge by the share of the footprint inside ongoing scans, not by the all-or-nothing status.
+      const share = Number.isInteger(plan.total_points) && plan.total_points > 0 && Number.isInteger(plan.counts?.existing_area)
+        ? plan.counts.existing_area / plan.total_points : status === 'existing_coverage' ? 1 : 0;
+      const areas = Array.isArray(data.areas) ? data.areas.slice(0, 2).map(a => text(a, 40)).filter(Boolean).join(', ') : '';
+      if (share >= 0.7) { patch({ scan: 'ongoing', scanNote: `Ongoing scans cover this spot${areas ? ` (${areas})` : ''}.` }); return; }
       const near = Array.isArray(data.nearest_areas) ? data.nearest_areas[0] : null;
-      const note = 'No ongoing scans cover this spot, so the watch only sees what the last scan found.'
+      const note = (share > 0 ? 'Ongoing scans cover only part of this spot, so some catches here may not show up.'
+        : 'No ongoing scans cover this spot, so the watch only sees what the last scan found.')
         + (near && number(near.distance_miles) ? ` The closest scanned area is ${text(near.name, 40)}, ${near.distance_miles} mi away.` : '');
-      patch({ scan: 'none', scanNote: note });
+      patch({ scan: share > 0 ? 'partial' : 'none', scanNote: note });
       host.notify({ kind: 'warning', message: note });
     } catch { /* the watch itself works without this check */ }
   }
@@ -507,7 +510,7 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
       h(Button, { c, primary: !w.active, disabled: !w.active && !center, onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop' : 'Watch' })
     ] }),
     h('p', { role: 'status', style: { ...fine(c), margin: '6px 0 0' }, children: status }),
-    w.active && w.scanNote && h('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'none' ? c.accent : c.muted }, children: w.scanNote }),
+    w.active && w.scanNote && h('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'ongoing' ? c.muted : c.accent }, children: w.scanNote }),
     w.error && h(ErrorNote, { c, message: w.error }),
     w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
     w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' })
