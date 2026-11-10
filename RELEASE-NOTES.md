@@ -8,6 +8,7 @@
 - Fix: "A scan is in progress here" stayed on the Radar after the scan had finished. It now clears by itself.
 - Hunt Watch sits under the map in its own panel, says what it is watching for, and no longer prints a bare map link. The desktop alert drops the link too: clicking it opens the catch in the Radar.
 - Radar buttons write a short question. A named place no longer carries a map link, **Best catches** no longer asks for catch cards (ask for "PokeIt cards" to get them), and **Events today** asks about today's events for the spawns at the spot. The Radar has one **Open live map** button; the chat card's second button is **Open Radar**.
+- In Hermes Desktop a catch answer ends with an **Open PokeIt Radar** button. It replaces the sentence about the Radar and reopens the pane after you closed it.
 - Map icons are a little smaller and the map leaves room for icons that sit on the ring. Timers in the list say "left". The footer is one quiet line.
 - The skill keeps the service's order for the catch list, so the chat and the Radar agree more often.
 

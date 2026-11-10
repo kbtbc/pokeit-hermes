@@ -80,7 +80,7 @@ test('scan progress uses confirmed plus existing counts, never elapsed time', ()
 test('registration only mounts UI and timers; it never calls the service', () => {
   const contributions = [], disposers = [];
   ui.default.register({ register: c => contributions.push(c), setInterval: () => () => {}, onEvent: () => {}, onDispose: d => disposers.push(d), rest: () => { throw Error('unexpected request'); } });
-  assert.deepEqual(contributions.map(c => c.id), ['radar', 'status', 'catch', 'scan']);
+  assert.deepEqual(contributions.map(c => c.id), ['radar', 'status', 'catch', 'radar-link', 'scan']);
   assert.equal(contributions[0].data.placement, 'right');
   assert.equal(contributions[2].data.name, 'pokeit-catch');
   for (const dispose of disposers) dispose();
@@ -302,6 +302,14 @@ test('watch starts only on request, aggregates and dedupes observations, throttl
   f.watch.stop(); assert.equal(f.timers[0].stopped, true);
   const before = reads; await f.watch.poll(); assert.equal(reads, before); assert.equal(f.watch.view.get().active, false);
   f.dispose();
+});
+
+test('the chat answer\'s Open Radar button takes a bounded point, radius and place, or nothing', () => {
+  const full = ui.radarAttributes({ lat: '33.7632675', lon: '-84.3951173', radius: '371', place: 'Georgia Aquarium' });
+  assert.equal(JSON.stringify(full), JSON.stringify({ center: { lat: 33.7632675, lon: -84.3951173 }, radius: 371, label: 'Georgia Aquarium' }));
+  assert.equal(ui.radarAttributes({ lat: '33.7', lon: '-84.3' }).radius, 500);
+  assert.equal(ui.radarAttributes({ lat: '33.7', lon: '-84.3', radius: '99999' }).radius, 500);
+  for (const attrs of [{}, undefined, { lat: '91', lon: '0' }, { lat: 'x', lon: '1' }, { lat: '33.7' }]) assert.equal(ui.radarAttributes(attrs), null);
 });
 
 test('the toast leads with the catch, then where and when and how long it lasts, with no URL', () => {
