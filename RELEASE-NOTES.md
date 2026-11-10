@@ -1,5 +1,16 @@
 # PokeIt release notes
 
+## Unreleased · November 10, 2026 (ET)
+
+- The sample questions use the Georgia Aquarium in Atlanta and the Texas State Capitol in Austin. The empty Radar's examples say which ones answer at once ("live now") and which need a scan ("fresh scan").
+- README: restart Hermes after an install or update. A Desktop that was not restarted can open chats without the PokeIt tools, and the Radar cannot follow those. The skill now tells the agent to say so instead of reaching the service another way.
+- Fix: after a scan the agent reads 371 m but the Radar read 500 m, so the two listed different catches. The Radar now reads the ring the agent read and offers it in the Ring menu.
+- Fix: "A scan is in progress here" stayed on the Radar after the scan had finished. It now clears by itself.
+- Hunt Watch sits under the map in its own panel, says what it is watching for, and no longer prints a bare map link in the pane (the desktop alert keeps it).
+- Radar buttons write a short question. A named place no longer carries a map link, **Best catches** no longer asks for catch cards (ask for "PokeIt cards" to get them), and **Events today** asks about today's events for the spawns at the spot. The Radar has one **Open live map** button; the chat card's second button is **Open Radar**.
+- Map icons are a little smaller and the map leaves room for icons that sit on the ring. Timers in the list say "left". The footer is one quiet line.
+- The skill keeps the service's order for the catch list, so the chat and the Radar agree more often.
+
 ## 0.1.19 · November 9, 2026 (ET)
 
 - Fix: the Radar did not follow a search in some chats. The hook that follows the agent's search compared the event's session id with only one of the two ids a chat can have, so it ignored every search in chats where they differ. It now accepts either. The pane also follows the chat in front instead of staying tied to the chat it was first opened from, and a Hunt Watch toast opens the catch in the chat you are in.
