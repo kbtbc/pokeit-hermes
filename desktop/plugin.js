@@ -40,12 +40,6 @@ export function catchAttributes(attrs) {
 export function placeName(attrs) {
   return typeof attrs?.place === 'string' ? attrs.place.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80) : '';
 }
-// The chat answer's "Open PokeIt Radar" button names the point it was about. All of it is optional: with no valid point the button just opens the pane.
-export function radarAttributes(attrs) {
-  const lat = coordinate(attrs?.lat, 85), lon = coordinate(attrs?.lon, 180);
-  if (lat === null || lon === null) return null;
-  return { center: { lat, lon }, radius: radiusOf(Number(attrs?.radius)), label: placeName(attrs) || 'Search point' };
-}
 // Only the exact word "compact" changes the card; anything else is the full card.
 export function catchVariant(attrs) { return attrs?.variant === 'compact' ? 'compact' : 'full'; }
 const mmss = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -967,16 +961,6 @@ function CatchCard({ ctrl, attrs, sid, streaming }) {
     data?.truncated && h('small', { style: fine(c), children: 'The source returned a limited sample.' })
   ] });
 }
-// One button under a chat answer. It opens the Radar (also after the player closed it), and reads the answer's point when the pane is somewhere else.
-function RadarLink({ ctrl, attrs, sid, streaming }) {
-  const c = useColors(), target = radarAttributes(attrs);
-  const open = () => {
-    const s = ctrl.state(sid);
-    openRadar(ctrl, sid);
-    if (target && !(s.center && distanceBearing(s.center, target.center)?.meters < 5)) void ctrl.read(sid, target.center, target.label, target.radius);
-  };
-  return h('p', { style: { margin: '6px 0' }, children: h(Button, { c, disabled: !!streaming, onClick: open, children: 'Open PokeIt Radar' }) });
-}
 function ScanCard({ ctrl, attrs, streaming }) {
   const c = useColors(), id = SCAN_ID.test(attrs?.id || '') ? attrs.id : null;
   const now = useValue(ctrl.clock), [data, setData] = useState(null), [error, setError] = useState(''), [retry, setRetry] = useState(0);
@@ -1042,7 +1026,6 @@ export default {
     ctx.register({ id: 'radar', area: PANES_AREA, title: 'PokeIt Radar', data: { placement: 'right', width: '350px' }, render: () => h(RadarPane, { ctrl }) });
     ctx.register({ id: 'status', area: STATUSBAR_AREAS.right, order: 130, render: () => h(StatusChip, { ctrl }) });
     ctx.register({ id: 'catch', area: TRANSCRIPT_DIRECTIVE_AREA, data: { name: 'pokeit-catch', render: ({ attrs, sessionId, streaming }) => h(CatchCard, { ctrl, attrs, sid: sessionId, streaming }) } });
-    ctx.register({ id: 'radar-link', area: TRANSCRIPT_DIRECTIVE_AREA, data: { name: 'pokeit-radar', render: ({ attrs, sessionId, streaming }) => h(RadarLink, { ctrl, attrs, sid: sessionId, streaming }) } });
     ctx.register({ id: 'scan', area: TRANSCRIPT_DIRECTIVE_AREA, data: { name: 'pokeit-scan', render: ({ attrs, streaming }) => h(ScanCard, { ctrl, attrs, streaming }) } });
   }
 };
