@@ -4,7 +4,7 @@
     "pokeit": {
       "type": "streamable-http",
       "url": "https://mcp.pokeit.cc/mcp",
-      "headers": {"User-Agent": "PokeIt-Hermes/0.1.17", "X-PokeIt-Search-Diagnostics": "1"}
+      "headers": {"User-Agent": "PokeIt-Hermes/0.1.18", "X-PokeIt-Search-Diagnostics": "1"}
     }
   }
 }

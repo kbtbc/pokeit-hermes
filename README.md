@@ -33,7 +33,7 @@ Give a specific spot: an address, an intersection or a landmark. Your agent does
 
 Hermes calls the hosted PokeIt MCP server, which answers from observations on the public map. There is no language model inside the server.
 
-Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart.
+Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. The prompt calls PokeIt an "untrusted server" and the scan tool "write-capable": that is how Hermes labels any tool that can change something outside your machine, and PokeIt declares it on purpose. Choose **Run**, or **Always allow** to skip the prompt next time. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart. The [coverage map](https://pokeit.cc/coverage) shows where scanning is ongoing.
 
 ## Why a plugin, not just a skill
 
@@ -44,11 +44,13 @@ Outside the mapped areas, your agent can ask PokeIt to scan: 49 points covering 
 
 ## Hermes Desktop
 
-On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`. Then open **PokeIt Radar** from the status bar. Pick a spot to see its catches on a radar and in a list, or use **Show in Radar** on a chat card. Ask for "PokeIt cards", or press **Best catches** in the Radar, to get catch cards in the chat. Catch cards show the species art, IVs, a compass to the catch, a live countdown and a walking guide, a straight line at 5 km/h from the place you searched rather than from you. Scan cards fill a progress ring as points are confirmed. New scans still use the agent's approval prompt.
+On Hermes 0.23.0 or newer, use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`.
+
+The **PokeIt Radar** opens beside the chat by itself after a catch search and follows it. It reads the same spot, lists the best three or four catches (hundos, nundos and PvP #1 first, then the highest IV) and shows them on a map with the gyms and Pokéstops around. There is no search box: ask in chat. Close the Radar and it stays closed until you open **PokeIt Radar** from the status bar. The buttons under the map (**Best catches**, **Raids nearby**, **Open gyms**, **Events today**) put a ready question in the chat bar, replacing the question the last button wrote and leaving anything you typed. Ask for "PokeIt cards", or press **Best catches**, to get catch cards in the chat. Catch cards show the species art, IVs, a compass to the catch, a live countdown and a walking guide, a straight line at 5 km/h from the place you searched rather than from you. Scan cards fill a progress ring as points are confirmed. New scans still use the agent's approval prompt.
 
 The Desktop installer adds the interface locally and the backend to your selected gateway profile. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
 
-**Hunt Watch:** pick a Radar spot and a catch filter, then choose **Watch this spot**. It checks existing observations within 500 m about once a minute and alerts you to new matches. Choose **Stop watch** to finish; switching profile or connection also stops it. It never starts scans. Matches appear in the app, with OS notifications when Hermes is in the background and notifications are allowed.
+**Hunt Watch:** pick a catch filter (highlights, hundos, nundos, PvP rank #1, or an IV minimum) and choose **Watch** on the spot the Radar follows. It checks existing observations within 500 m about once a minute and alerts you to new matches. It ends by itself after 2 hours, or when you choose **Stop**, switch profile or connection, or the gateway reconnects. It never starts scans, so it only sees new catches where scanning is ongoing; if no ongoing scan covers the spot, the Radar says so. An alert is a toast titled `PokeIt! Nearby <species> (<IV>%)` that says where and when it was found, when it expires, and links to the catch on the map. Matches also appear in the app. OS toasts appear when Hermes is in the background and notifications are allowed; whether they play a sound follows your system's notification settings.
 
 ## Tools
 
@@ -69,7 +71,7 @@ The Desktop installer adds the interface locally and the backend to your selecte
 - This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
-- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. The saved spot is only read when you choose **Resume**. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.
+- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app. When a watch starts, the Radar sends the spot's coordinates to PokeIt's coverage check to learn whether scanning is ongoing there.
 - The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
 
 ## If the tools disappear

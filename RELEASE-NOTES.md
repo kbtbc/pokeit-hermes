@@ -1,5 +1,15 @@
 # PokeIt release notes
 
+## 0.1.18 · November 9, 2026 (ET)
+
+- The Radar follows your chat: it opens beside the answer after a catch search, reads the same spot, and lists the best three or four catches (hundos, nundos and PvP #1 first, then the highest IV) with the gyms and Pokéstops around. The search box is gone; ask in chat. Close it and it stays closed until you open it from the status bar. A note under the list says why these catches were picked, and a read older than five minutes refreshes when you return to the pane.
+- The chat answer is a short list with distance, compass direction, expiry and a map link per catch, and the chat map picture shows the same catches large and bright with the rest faded. The Radar's featured card is more compact and the PvP #1 label stays above the selection ring.
+- Radar buttons put a ready question in the chat bar and replace the question the last button wrote instead of stacking them; text you typed stays.
+- Hunt Watch ends by itself after 2 hours and says so. It checks whether ongoing scans cover the spot and says so when none do. The toast is titled `PokeIt! Nearby <species> (<IV>%)` and gives where and when it was found, when it expires, and a map link.
+- When only a city or large park is named, the agent opens with a varied short line ("Let's zoom in!", "<place> is a bit too wide for a single scan.", "Help me narrow that down!") and asks for an address, intersection or landmark with three examples from that place. When the player's answer picks the place the agent offered, it no longer asks again. Before a scan it says Hermes will ask for approval.
+- The service now understands more ways people name places (Saint/St, centre/center, "the", "in front of", a bare "hotel" inside a site) and finds a lone hotel, library or cinema inside a named site without a second question. Scan planning treats spots near the border between two neighbouring scan areas as covered. These are service changes; nothing to reinstall for them.
+- Beta diagnostics remain enabled in the MCP configuration. They must be opt-in in the final contest submission.
+
 ## 0.1.17 · November 8, 2026 (ET)
 
 - Desktop: a catch card whose data cannot be fetched keeps the place, the distance, a map button and a retry instead of a red box. The unreachable message says how to fix it (enable PokeIt for the profile you are chatting in).
