@@ -5,7 +5,11 @@
   </picture>
 </p>
 
-**Ask Hermes what's worth catching near you.** A live radar opens beside the chat with the best Pokémon GO catches, raids and events around any spot, from a real scanning network. Set a watch, go back to work, and your desktop tells you when something good appears. No account, no API key.
+# Real-time Pokémon GO hunting. Near you. Inside Hermes Desktop.
+
+**Find your next catch. Let Hermes keep watch.**
+
+Ask Hermes what's worth catching near you. A live radar opens beside the chat with the best Pokémon GO catches, raids and events around any spot, from a real scanning network. Set a watch, go back to work, and your desktop tells you when something good appears. No account, no API key.
 
 ![Hermes Desktop: a PokeIt answer in chat with the PokeIt Radar beside it, showing four catches on a live map near the Georgia Aquarium in Atlanta](assets/desktop-radar.webp)
 
@@ -103,6 +107,8 @@ Any MCP client can connect to `https://mcp.pokeit.cc/mcp` over Streamable HTTP. 
 `plugin.json`, `mcp.json`, one skill, `desktop/plugin.js` and a small `dashboard/` proxy. No extra dependencies or build step. No `plugin.yaml`: with one present, Hermes skips the portable MCP tools.
 
 ---
+
+PokeIt for Hermes runs on [pokeit.cc](https://pokeit.cc), a real-time Pokémon GO MCP service.
 
 Questions and feedback: [Discord](https://discord.gg/3NSTeCxBXk). MIT licensed.
 
