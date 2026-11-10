@@ -508,6 +508,21 @@ test('the Radar reads the ring the agent read, including 371 m after a scan, and
   assert.equal(f.ctrl.state('test').coverage.scan_plan.status, 'fresh');
 });
 
+test('going back to an earlier place shows that place\'s name, not the last one resolved', async () => {
+  host.openWorkspace = () => {};
+  const f = followHarness(async path => ({ ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-10T06:00:00Z' } : {} }));
+  const resolve = (query, locality) => f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__resolve_location', args: { query, locality } } });
+  const find = (lat, lon) => f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__find_pokemon', args: { lat, lon, radius_m: 500 } } });
+  resolve('Georgia Aquarium', 'Atlanta'); find(33.7632675, -84.3951173); await flush();
+  assert.equal(f.ctrl.state('test').label, 'Georgia Aquarium, Atlanta');
+  resolve('Charging Bull', 'New York'); find(40.7055641, -74.0134436); await flush();
+  assert.equal(f.ctrl.state('test').label, 'Charging Bull, New York');
+  find(33.7632675, -84.3951173); await flush();                          // the agent reuses the Atlanta point without resolving again
+  assert.equal(f.ctrl.state('test').label, 'Georgia Aquarium, Atlanta');
+  find(30.2746912, -97.7405171); await flush();                          // a point nobody named
+  assert.equal(f.ctrl.state('test').label, 'Search point');
+});
+
 test('a scan the agent starts shows its progress in the Radar and the spot is read when the plan is covered', async () => {
   host.openWorkspace = () => {};
   host.state.focusedStoredSessionId.set('stored-2'); host.state.focusedSessionId.set('runtime-2');

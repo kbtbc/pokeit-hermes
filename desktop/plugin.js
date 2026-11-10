@@ -484,6 +484,19 @@ export function createController(ctx) {
   }
   function stopScan(sid) { scans.delete(sid); update(sid, { scan: null }); }
   controller.stopScan = stopScan;
+  // The place name comes from the agent's resolve_location call. A name belongs to the first search made after it. When the
+  // chat returns to an earlier place the agent reuses the point without resolving again, so names are also remembered by point;
+  // otherwise the last resolved name (another city) would be shown over this one.
+  const places = [];
+  const labelFor = center => {
+    if (lastPlace && !lastPlace.used && Date.now() - lastPlace.at < 180000 && lastPlace.label) {
+      lastPlace.used = true;
+      places.unshift({ center, label: lastPlace.label });
+      if (places.length > 20) places.length = 20;
+      return lastPlace.label;
+    }
+    return places.find(p => distanceBearing(p.center, center)?.meters < 60)?.label || null;
+  };
   ctx.onEvent('tool.complete', event => {
     follow.events++;
     const payload = event?.payload, name = typeof payload?.name === 'string' ? payload.name : '', args = payload?.args || {};
@@ -494,7 +507,7 @@ export function createController(ctx) {
     if (!(finds || scanning) || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
     if (!inFocusedChat(event)) { follow.other_chat++; return; }
     const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = radiusOf(args.radius_m);
-    const placeLabel = lastPlace && Date.now() - lastPlace.at < 180000 && lastPlace.label ? lastPlace.label : null;
+    const placeLabel = labelFor(center);
     if (scanning) { trackScan(sid, center, placeLabel || 'Search point', radius); openRadar(controller, sid, false); return; }
     const same = s.center && distanceBearing(s.center, center)?.meters < 5 && s.radius === radius;
     if (!same || Date.now() - lastFollow > 30000) {
