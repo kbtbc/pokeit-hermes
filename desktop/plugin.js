@@ -13,7 +13,7 @@ const Frame = sdk.SandboxedFrame || null;
 const TERMINAL = new Set(['data_refreshed', 'existing_coverage', 'partial_unverified', 'failed']);
 const RADII = [100, 250, 500, 1000, 2000];
 const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
-const EXAMPLES = ['Alpharetta City Hall, Georgia', 'Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
+const EXAMPLES = ['the Georgia Aquarium in Atlanta','Bethesda Terrace in Central Park, New York', 'Pike Place Market, Seattle'];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0, scan: null });

@@ -5,7 +5,7 @@ description: Live Pokémon GO catches, raids, gyms, showcases and events near a 
 
 # PokeIt
 
-Use PokeIt for any live Pokémon GO question, including "any good pokemon in Atlanta". Never answer from a web search or memory, and never present a fixture or guess as live data. If the tools are missing, say the PokeIt connector is off in this profile and how to enable it. The server instructions and tool descriptions hold the per-tool rules; this skill covers the order of work and how to answer.
+Use PokeIt for any live Pokémon GO question, including "any good pokemon in Atlanta". Never answer from a web search or memory, and never present a fixture or guess as live data. If the PokeIt tools are missing from this chat, stop and say so in two lines: the tools are not loaded here, so restart Hermes (on Desktop, quit and reopen the app), start a new chat, and if they are still missing enable the PokeIt plugin for this profile. Do not reach the service any other way: no terminal, script, HTTP call or other skill stands in for the tools, because the scan approval and the Desktop Radar only work through them. The server instructions and tool descriptions hold the per-tool rules; this skill covers the order of work and how to answer.
 
 ## Order of work
 

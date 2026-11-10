@@ -17,7 +17,11 @@
 hermes plugins install kbtbc/pokeit-hermes
 ```
 
-On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead. Then start a fresh chat (Desktop: restart the app). Update with `hermes plugins update pokeit`. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
+On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead.
+
+**Then restart Hermes and open a new chat.** On Desktop, quit the app and start it again. A chat that was open during the install, or a Desktop that was not restarted, does not have the PokeIt tools yet, and the Radar cannot follow it. Do the same after an update.
+
+Update with `hermes plugins update pokeit`. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
 
 *Optional:* install into a separate profile to avoid conflicts with other Pokémon GO skills or APIs in your main one: `hermes profile create pokeit`, `hermes -p pokeit setup` (model and keys), then `hermes -p pokeit plugins install kbtbc/pokeit-hermes`, and chat in that profile.
 
@@ -25,11 +29,13 @@ On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install f
 
 Ask:
 
-> Any hundos or rank-one PvP catches near Alpharetta City Hall?
+> What's worth catching near the Georgia Aquarium in Atlanta?
 >
-> What raids and showcases are on near Alpharetta City Hall?
+> What raids and showcases are on near the Georgia Aquarium in Atlanta?
 >
-> What's worth catching near Alpharetta City Hall? (On Hermes Desktop, add "Show PokeIt cards".)
+> Any hundos or rank-one PvP catches near the Georgia Aquarium in Atlanta?
+
+On Hermes Desktop the PokeIt Radar opens beside the first answer by itself. Add "Show PokeIt cards" to a question to get catch cards in the chat.
 
 Give a specific spot: an address, an intersection or a landmark. Your agent doesn't know your GPS, so if you only name a city it will ask for something smaller. Answers link to the [live map](https://pokeit.cc/map). You can also try the search without Hermes at [pokeit.cc](https://pokeit.cc).
 
@@ -73,7 +79,8 @@ The Desktop installer adds the interface locally and the backend to your selecte
 - This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
-- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.- The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
+- The Radar saves your last spot and radius, and Hunt Watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.
+- The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
 
 ## If the tools disappear
 
