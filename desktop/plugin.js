@@ -16,6 +16,7 @@ const RADII = [100, 250, 500, 1000, 2000];
 export const radiusOf = n => Number.isFinite(n) && n >= 50 && n <= 2000 ? Math.round(n) : 500;
 const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
 // The "live now" examples sit inside ongoing coverage, so they answer at once. A "fresh scan" one needs a scan, which Hermes asks the player to approve.
+const NEAR_ME = 'What Pokémon are worth catching near me?';
 const EXAMPLES = [['the Georgia Aquarium in Atlanta', 'live now'], ['the Gateway Arch in St. Louis', 'live now'], ['Bethesda Terrace in Central Park, New York', 'fresh scan']];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
@@ -177,14 +178,16 @@ function useActiveSession() {
 }
 const WATCH_KINDS = { highlights: 'Highlights', hundo: 'Hundos', nundo: 'Nundos', pvp: 'PvP rank #1', iv: 'IV at least' };
 const WATCH_LIMIT_MS = 2 * 60 * 60 * 1000;
-const clockTime = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-// The toast leads with what was found, then where and when, and how long it lasts. No URL: clicking it opens the catch in the Radar.
+// The toast leads with what was found, then where, and how long is left. No clock times: this PC's clock can differ from the
+// place's clock that the chat uses, and time left is what the player acts on. No URL: clicking it opens the catch in the Radar.
 export function watchToast(fresh, label, foundAt) {
   const first = fresh[0], end = Date.parse(first?.expires_at);
   const iv = number(first?.iv_percent) ? `${Number(first.iv_percent.toFixed(1))}%` : 'IV unknown';
   const title = `PokeIt! Nearby ${text(first?.name, 35) || 'a catch'} (${iv})${fresh.length > 1 ? ` +${fresh.length - 1} more` : ''}`;
-  const expires = Number.isFinite(end) ? `${clockTime(end)}${first.expiry_verified === true ? '' : ' (estimated)'}` : 'time unknown';
-  return { title, body: `Found near ${label} @ ${clockTime(foundAt)}\nExpires: ${expires}\nClick to open it in the PokeIt Radar.` };
+  const minutes = Number.isFinite(end) ? Math.floor((end - foundAt) / 60000) : null;
+  const left = minutes === null ? 'Time left unknown' : minutes < 1 ? 'Under a minute left'
+    : `${first.expiry_verified === true ? '' : 'About '}${minutes} min left`;
+  return { title, body: `Found near ${label}\n${left}\nClick to open it in the PokeIt Radar.` };
 }
 function watchScope() { return JSON.stringify([host.state.connectionId?.get() || 'local', host.state.profile.get() || 'default']); }
 function watchPrefs(value) {
@@ -237,9 +240,7 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
       const covered = Number.isInteger(plan.counts?.existing_area) ? plan.counts.existing_area : status === 'existing_coverage' ? 1 : 0;
       const areas = Array.isArray(data.areas) ? data.areas.slice(0, 2).map(a => text(a, 40)).filter(Boolean).join(', ') : '';
       if (covered > 0 || (Array.isArray(data.areas) && data.areas.length)) { patch({ scan: 'ongoing', scanNote: `Ongoing scans cover this spot${areas ? ` (${areas})` : ''}.` }); return; }
-      const near = Array.isArray(data.nearest_areas) ? data.nearest_areas[0] : null;
-      const note = 'No ongoing scans cover this spot, so the watch only sees what the last scan found.'
-        + (near && number(near.distance_miles) ? ` The closest scanned area is ${text(near.name, 40)}, ${near.distance_miles} mi away.` : '');
+      const note = 'Watch requires ongoing scans, which are not yet available in this area. Please reach out to PokeIt to get this area covered for watching.';
       patch({ scan: 'none', scanNote: note });
       host.notify({ kind: 'warning', message: note });
     } catch { /* the watch itself works without this check */ }
@@ -575,17 +576,18 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
   const what = w.kind === 'iv' ? `IV ${w.minIV}% or better` : WATCH_KINDS[w.kind].toLowerCase();
   const status = w.busy ? 'Checking existing observations…'
     : w.active ? `Watching ${w.label} for ${what}, within 500 m. ${w.notice}`
-      : w.notice || 'Press Watch and get on with your work. A desktop alert tells you when a new match appears within 500 m. It checks once a minute for 2 hours and never starts a scan.';
+      : w.notice || 'Set it and get on with your work. A desktop alert tells you when a match appears within 500 m.';
   return hs('section', { 'aria-label': 'Hunt Watch', style: { ...panel(c), marginTop: 14, padding: 12, borderColor: w.active ? c.accent : c.line }, children: [
     hs('div', { style: { ...rowStyle, gap: 6 }, children: [
-      hs('strong', { style: { fontSize: 13, marginRight: 4 }, children: ['Hunt Watch', w.active && h('span', { style: { color: c.accent, fontSize: 11, marginLeft: 6 }, children: '● on' })] }),
+      hs('strong', { style: { fontSize: 13, marginRight: 4 }, children: ['Watch it · Desktop Alerts', w.active && h('span', { style: { color: c.accent, fontSize: 11, marginLeft: 6 }, children: '● on' })] }),
       h('select', { 'aria-label': 'Alert me about', value: w.kind, disabled: w.active, onChange: e => ctrl.watch.configure({ ...w, kind: e.target.value }),
         style: { ...field, flex: '1 1 120px', minWidth: 0 }, children: Object.entries(WATCH_KINDS).map(([value, name]) => h('option', { value, children: name }, value)) }),
       w.kind === 'iv' && h('input', { 'aria-label': 'Minimum IV %', type: 'number', min: 0, max: 100, step: 1, value: w.minIV, disabled: w.active,
         onChange: e => ctrl.watch.configure({ ...w, minIV: Number(e.target.value) }), style: { ...field, width: 58 } }),
       h(Button, { c, primary: !w.active, disabled: !w.active && !center, onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop' : 'Watch' })
     ] }),
-    h('p', { role: 'status', style: { ...fine(c), margin: '6px 0 0' }, children: status }),
+    h('p', { role: 'status', style: { ...fine(c), margin: '8px 0 0', fontSize: w.active || w.busy ? 12 : 13, color: w.active || w.busy ? c.muted : c.fg }, children: status }),
+    !w.active && !w.busy && h('p', { style: { ...fine(c), margin: '3px 0 0', fontSize: 11 }, children: 'Checks once a minute for 2 hours. Never starts a scan.' }),
     w.active && w.scanNote && h('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'ongoing' ? c.muted : c.accent }, children: w.scanNote }),
     w.error && h(ErrorNote, { c, message: w.error }),
     w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
@@ -837,7 +839,7 @@ function ScanProgress({ c, scan, place, now, onRead }) {
       h('circle', { cx: 20, cy: 20, r: 2.5, fill: c.accent })] }),
     hs('div', { style: { minWidth: 0 }, children: [
       h('strong', { style: { fontSize: 13 }, children: `Scanning ${place || 'this spot'}…` }),
-      h('div', { style: fine(c), children: 'Catches appear here when it finishes.' }),
+      h('div', { style: fine(c), children: 'Scan in progress, this may take a minute or two.' }),
       line.slow && hs('div', { style: { ...fine(c), marginTop: 4 }, children: ['Still waiting on the last points. ',
         h('button', { type: 'button', onClick: onRead, style: { background: 'none', border: 0, padding: 0, color: c.accent, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }, children: 'Show what is here now' })] })
     ] })
@@ -885,10 +887,11 @@ function RadarPane({ ctrl, sessionId }) {
     h(ErrorNote, { c, message: s.error }),
     !s.center ? hs('div', { style: { textAlign: 'center', marginTop: 8 }, children: [
       h(RadarSvg, { ctrl, c, s, sid, ghost: true }),
-      h('p', { style: { margin: '6px 0 4px', fontSize: 15, fontWeight: 650 }, children: 'Ask Hermes about a place.' }),
-      h('p', { style: fine(c), children: 'The map opens beside the answer and follows it. Pick one to put it in the chat bar:' }),
-      hs('div', { style: { display: 'grid', gap: 6, marginTop: 8 }, children: [
-        ...EXAMPLES.map(([spot, kind]) => hs(Button, { c, style: { textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }, onClick: () => void draft(`What's worth catching near ${spot}?`, sid), children: [
+      h('p', { style: { margin: '10px 0 4px', fontSize: 24, fontWeight: 800, lineHeight: 1.15 }, children: "What's worth catching near you?" }),
+      h('p', { style: { ...fine(c), fontSize: 13 }, children: 'Ask Hermes in the chat, or start with one of these:' }),
+      h(Button, { c, primary: true, style: { width: '100%', marginTop: 10, padding: '13px 16px', fontSize: 15, fontWeight: 700 }, onClick: () => void draft(NEAR_ME, sid), children: NEAR_ME }),
+      hs('div', { style: { display: 'grid', gap: 5, marginTop: 10 }, children: [
+        ...EXAMPLES.map(([spot, kind]) => hs(Button, { c, style: { textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, fontSize: 12, padding: '6px 10px' }, onClick: () => void draft(`What's worth catching near ${spot}?`, sid), children: [
           h('span', { children: `What's worth catching near ${spot}?` }),
           h('span', { style: { font: `600 11px ${font}`, color: kind === 'live now' ? c.accent : c.muted, whiteSpace: 'nowrap' }, children: kind })] }, spot)),
         last && h(Button, { c, style: { textAlign: 'left' }, disabled: s.busy, onClick: () => void ctrl.read(sid, last.center, last.label, last.radius), children: `Back to ${last.label}` })

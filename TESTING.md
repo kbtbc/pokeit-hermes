@@ -27,10 +27,10 @@ You have the new build when the **PokeIt Radar** pane says "Follows your chat" a
 | 4 | Press **Best catches**, then **Raids nearby** | The chat bar holds only the last question, not both. |
 | 5 | "anything good spawning in Avalon", then answer "Hotel side" | The agent goes on with the hotel. It must not ask "did you mean the hotel?" after you already chose it. |
 | 6 | Name a landmark outside the listed areas, in your own city if it is in the US | The agent says a fresh scan is needed and that Hermes will ask you to approve it. The prompt calls the server "untrusted" and the tool "write-capable"; that is expected. **Run** starts a 49-point scan (a few minutes). The Radar opens at the spot with a small grid of 49 dots that fill as points are confirmed, then shows the catches when it finishes. If it stalls, "Show what is here now" reads what exists. **Reject** is also a valid test: the agent should stop and say so. |
-| 7 | Radar on the Georgia Aquarium (or anywhere in the Atlanta area), Hunt Watch filter "IV at least" 80, press **Watch**, then minimize Hermes | Within a couple of minutes an OS toast titled `PokeIt! Nearby <species> (<IV>%)`, with where and when it was found, and when it expires. Clicking it opens the catch in the Radar. Does it make a sound? Note whether it does. |
+| 7 | Radar on the Georgia Aquarium (or anywhere in the Atlanta area), Hunt Watch filter "IV at least" 80, press **Watch**, then minimize Hermes | Within a couple of minutes an OS toast titled `PokeIt! Nearby <species> (<IV>%)`, with where it was found and how long is left. Clicking it opens the catch in the Radar. Does it make a sound? Note whether it does. |
 | 8 | Start a new chat before searching | The empty Radar shows a faded map behind the rings. |
 
-The watch ends by itself after 2 hours, or press **Stop**. It never starts scans. Outside an area with ongoing scans the Radar warns that it will only see what the last scan found.
+The watch ends by itself after 2 hours, or press **Stop**. It never starts scans. Outside an area with ongoing scans the Radar warns that the watch needs ongoing scans there.
 
 ## 3. What to report
 

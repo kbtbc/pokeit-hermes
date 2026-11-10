@@ -292,7 +292,7 @@ test('watch starts only on request, aggregates and dedupes observations, throttl
   assert.equal(f.watch.start('test', watchCenter, 'City Hall'), true);
   await flush(); assert.equal(reads, 1); assert.equal(f.timers[0].ms, 60000);
   assert.equal(f.notices.filter(n => n.kind === 'os').length, 1);
-  assert.match(f.notices[0].body, /Nearby Dratini \(100%\) \+1 more\. Found near City Hall @ /);
+  assert.match(f.notices[0].body, /Nearby Dratini \(100%\) \+1 more\. Found near City Hall\. /);
   f.advance(60000); rows = [...rows, match('c')]; await f.watch.poll();
   assert.equal(f.notices.filter(n => n.kind === 'os').length, 1);
   f.advance(60000); await f.watch.poll();
@@ -304,17 +304,18 @@ test('watch starts only on request, aggregates and dedupes observations, throttl
   f.dispose();
 });
 
-test('the toast leads with the catch, then where and when and how long it lasts, with no URL', () => {
+test('the toast leads with the catch, then where and how long is left, with no clock time and no URL', () => {
   const found = Date.parse('2026-11-09T19:30:00');
   const one = ui.watchToast([{ ...match('toast'), name: 'Skwovet', iv_percent: 91.11, lat: 33.7601, lon: -84.3934, expires_at: '2026-11-09T19:48:00', expiry_verified: true }], 'Centennial Olympic Park, Atlanta', found);
   assert.equal(one.title, 'PokeIt! Nearby Skwovet (91.1%)');
   const lines = one.body.split(/\r?\n/);
-  assert.match(lines[0], /^Found near Centennial Olympic Park, Atlanta @ 7:30/);
-  assert.match(lines[1], /^Expires: 7:48/); assert.doesNotMatch(lines[1], /estimated/);
+  assert.equal(lines[0], 'Found near Centennial Olympic Park, Atlanta');
+  assert.equal(lines[1], '18 min left'); assert.doesNotMatch(one.body, /\d:\d\d|AM|PM/);
   assert.equal(lines[2], 'Click to open it in the PokeIt Radar.'); assert.doesNotMatch(one.body, /https?:/);
   const many = ui.watchToast([match('a'), match('b'), match('c')], 'Park', found);
   assert.match(many.title, /\+2 more$/);
-  assert.match(ui.watchToast([{ ...match('guess'), expiry_verified: false }], 'Park', found).body, /Expires: .* \(estimated\)/);
+  assert.match(ui.watchToast([{ ...match('guess'), expires_at: '2026-11-09T19:40:00', expiry_verified: false }], 'Park', found).body, /\nAbout 10 min left\n/);
+  assert.match(ui.watchToast([{ ...match('soon'), expires_at: '2026-11-09T19:30:40', expiry_verified: true }], 'Park', found).body, /\nUnder a minute left\n/);
 });
 test('a watch ends by itself after two hours and says so', async () => {
   const f = watchHarness(async path => path.startsWith('/coverage') ? {} : { observations: [], truncated: false });
@@ -341,7 +342,7 @@ test('the watch says whether ongoing scans cover the spot, and warns when none d
     ? { areas: [], scan_plan: { status: 'needs_scan', total_points: 49, counts: { existing_area: 0, needed: 49 } }, nearest_areas: [{ name: 'PA-Philadelphia', distance_miles: 81.6 }] } : { observations: [] });
   none.watch.start('test', watchCenter, 'City Hall'); await flush();
   assert.equal(none.watch.view.get().scan, 'none');
-  assert.match(none.watch.view.get().scanNote, /No ongoing scans cover this spot.*PA-Philadelphia, 81\.6 mi away/);
+  assert.match(none.watch.view.get().scanNote, /^Watch requires ongoing scans, which are not yet available in this area\. Please reach out to PokeIt/);
   assert.equal(none.watch.view.get().active, true); none.dispose();
   const unknown = watchHarness(async path => { if (path.startsWith('/coverage')) throw Error('down'); return { observations: [] }; });
   unknown.watch.start('test', watchCenter, 'City Hall'); await flush();
