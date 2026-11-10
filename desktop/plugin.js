@@ -1,9 +1,9 @@
-import { host, atom, useValue, useTheme, gatewayActivationEpoch, PANES_AREA, STATUSBAR_AREAS, TRANSCRIPT_DIRECTIVE_AREA } from '@hermes/plugin-sdk';
+import { host, atom, useValue, useTheme, gatewayActivationEpoch, STATUSBAR_AREAS, TRANSCRIPT_DIRECTIVE_AREA } from '@hermes/plugin-sdk';
 import * as sdk from '@hermes/plugin-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.20';
+const VERSION = '0.1.21';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -328,7 +328,7 @@ export function createController(ctx) {
       return response.data;
     } catch (e) {
       const old = /unexpected query parameter/i.test(e?.message || '');
-      const message = old ? 'This PokeIt backend is older than the Radar. Remove every PokeIt entry under Capabilities → Plugins, restart Hermes, then install it again.'
+      const message = old ? 'Hermes is still running an older PokeIt in the background. Quit Hermes and restart your computer (quitting the app alone can leave it running), then open Hermes again. If this stays, look for a second PokeIt under Capabilities → Plugins or in another profile and remove it.'
         : e?.safeMessage ? text(e.message, 240) : 'PokeIt could not be reached. Enable the plugin for the profile you are chatting in (Capabilities, then Plugins), then try again.';
       // Icons are decoration; a failed one must not mark the backend unhealthy.
       if (!quiet) { healthy = false; lastError = message; }
@@ -1104,7 +1104,8 @@ export default {
   id: 'pokeit', name: 'PokeIt Radar',
   register(ctx) {
     const ctrl = createController(ctx);
-    ctx.register({ id: 'radar', area: PANES_AREA, title: 'PokeIt Radar', data: { placement: 'right', width: '350px' }, render: () => h(RadarPane, { ctrl }) });
+    // The Radar is one workspace tab (openRadar). It is not also registered as a side pane: with Hermes's right-hand panel open
+    // that showed a second, narrow copy of the Radar beside the first.
     ctx.register({ id: 'status', area: STATUSBAR_AREAS.right, order: 130, render: () => h(StatusChip, { ctrl }) });
     ctx.register({ id: 'catch', area: TRANSCRIPT_DIRECTIVE_AREA, data: { name: 'pokeit-catch', render: ({ attrs, sessionId, streaming }) => h(CatchCard, { ctrl, attrs, sid: sessionId, streaming }) } });
     ctx.register({ id: 'scan', area: TRANSCRIPT_DIRECTIVE_AREA, data: { name: 'pokeit-scan', render: ({ attrs, streaming }) => h(ScanCard, { ctrl, attrs, streaming }) } });

@@ -21,7 +21,9 @@ hermes plugins install kbtbc/pokeit-hermes
 
 On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead.
 
-**Then restart Hermes and open a new chat.** On Desktop, quit the app and start it again. A chat that was open during the install, or a Desktop that was not restarted, does not have the PokeIt tools yet, and the Radar cannot follow it. Do the same after an update.
+**Then restart Hermes and open a new chat.** On Desktop, quit the app and start it again. A chat that was open during the install, or a Desktop that was not restarted, does not have the PokeIt tools yet, and the Radar cannot follow it.
+
+**Updating from an older PokeIt?** Hermes keeps background processes running after you quit the app, and they hold on to the old version. After `hermes plugins update pokeit` (or a remove and install), restart your computer, or the machine your Hermes backend runs on, before you open Hermes again. If the Radar says Hermes is still running an older PokeIt, that is the fix. Keep one PokeIt install: a second copy in another profile or under another name fights the first.
 
 Update with `hermes plugins update pokeit`. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
 

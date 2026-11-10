@@ -80,9 +80,9 @@ test('scan progress uses confirmed plus existing counts, never elapsed time', ()
 test('registration only mounts UI and timers; it never calls the service', () => {
   const contributions = [], disposers = [];
   ui.default.register({ register: c => contributions.push(c), setInterval: () => () => {}, onEvent: () => {}, onDispose: d => disposers.push(d), rest: () => { throw Error('unexpected request'); } });
-  assert.deepEqual(contributions.map(c => c.id), ['radar', 'status', 'catch', 'scan']);
-  assert.equal(contributions[0].data.placement, 'right');
-  assert.equal(contributions[2].data.name, 'pokeit-catch');
+  // The Radar is a workspace tab only; a side-pane registration would show a second copy of it.
+  assert.deepEqual(contributions.map(c => c.id), ['status', 'catch', 'scan']);
+  assert.equal(contributions[1].data.name, 'pokeit-catch');
   for (const dispose of disposers) dispose();
   // The plugin may watch for the agent's scan tool finishing (one exact expression, to show progress). It may never name that tool anywhere else, which would be a way to call it.
   const observed = "name.endsWith('request_scan')";
@@ -640,6 +640,7 @@ test('the scan line counts points and offers the partial read only after four mi
 test('an older PokeIt backend gets a plain instruction instead of "Unexpected query parameter"', async () => {
   const ctrl = iconController(async () => ({ ok: false, error: { message: 'Unexpected query parameter.' } }));
   await ctrl.read('t', { lat: 34, lon: -84 }, 'Spot', 500);
-  assert.match(ctrl.state('t').error, /older than the Radar/);
+  assert.match(ctrl.state('t').error, /older PokeIt in the background/);
+  assert.match(ctrl.state('t').error, /restart your computer/);
   assert.doesNotMatch(ctrl.state('t').error, /Unexpected query parameter/);
 });

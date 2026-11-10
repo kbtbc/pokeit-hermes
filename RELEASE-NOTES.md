@@ -1,5 +1,11 @@
 # PokeIt release notes
 
+## 0.1.21 · November 10, 2026 (ET)
+
+- Fix: with Hermes's right-hand panel open, a second, narrow copy of the Radar appeared beside the first. The Radar is now one workspace tab only.
+- Fix: the agent sent a time zone to tools that reject it, so raid and scan answers showed "1 tool call failed" before retrying. It now sends it only to the two tools that take one.
+- When an older PokeIt is still loaded in Hermes's background processes, the Radar now says so and says what fixes it (restart the computer), instead of telling you to reinstall. README: what to do when updating from an older PokeIt.
+
 ## 0.1.20 · November 10, 2026 (ET)
 
 - The Radar now follows raid, gym, showcase, Max Battle and PokéStop questions as well as catches; **Raids nearby** asks for raids and eggs right now, and the line under the map counts the raids on the gyms shown.
