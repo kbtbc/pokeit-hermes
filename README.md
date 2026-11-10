@@ -19,6 +19,8 @@ hermes plugins install kbtbc/pokeit-hermes
 
 On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead. Then start a fresh chat (Desktop: restart the app). Update with `hermes plugins update pokeit`. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
 
+*Optional:* install into a separate profile to avoid conflicts with other Pokémon GO skills or APIs in your main one: `hermes profile create pokeit`, `hermes -p pokeit setup` (model and keys), then `hermes -p pokeit plugins install kbtbc/pokeit-hermes`, and chat in that profile.
+
 ## Try it
 
 Ask:
