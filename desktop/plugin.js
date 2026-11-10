@@ -172,6 +172,17 @@ function useActiveSession() {
   return stored || runtime || 'new';
 }
 const WATCH_KINDS = { highlights: 'Highlights', hundo: 'Hundos', nundo: 'Nundos', pvp: 'PvP rank #1', iv: 'IV at least' };
+const WATCH_LIMIT_MS = 2 * 60 * 60 * 1000;
+const clockTime = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+// The toast leads with what was found, then where and when, how long it lasts, and a map link for the first catch.
+export function watchToast(fresh, label, foundAt) {
+  const first = fresh[0], end = Date.parse(first?.expires_at);
+  const iv = number(first?.iv_percent) ? `${Number(first.iv_percent.toFixed(1))}%` : 'IV unknown';
+  const title = `PokeIt! Nearby ${text(first?.name, 35) || 'a catch'} (${iv})${fresh.length > 1 ? ` +${fresh.length - 1} more` : ''}`;
+  const expires = Number.isFinite(end) ? `${clockTime(end)}${first.expiry_verified === true ? '' : ' (estimated)'}` : 'time unknown';
+  const link = number(first?.lat) && number(first?.lon) ? '\n' + mapUrl({ lat: first.lat, lon: first.lon }, 250) : '';
+  return { title, body: `Found near ${label} @ ${clockTime(foundAt)}\nExpires: ${expires}${link}` };
+}
 function watchScope() { return JSON.stringify([host.state.connectionId?.get() || 'local', host.state.profile.get() || 'default']); }
 function watchPrefs(value) {
   return { kind: Object.hasOwn(WATCH_KINDS, value?.kind) ? value.kind : 'highlights',
@@ -194,14 +205,40 @@ export function watchMatches(p, config, now) {
 }
 export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
   const saved = () => watchPrefs(ctx.storage?.get('watch-preferences:' + watchScope(), null));
-  const view = atom({ ...saved(), active: false, busy: false, error: '', lastChecked: null, matched: 0, matches: [], fresh: [], center: null, truncated: false, label: '', notice: '', notificationNote: '' });
-  let current = null, alive = true, cancelTimer = null, clearBubble = null;
+  const view = atom({ ...saved(), active: false, busy: false, error: '', lastChecked: null, matched: 0, matches: [], fresh: [], center: null, truncated: false, label: '', notice: '', notificationNote: '', scan: '', scanNote: '' });
+  let current = null, alive = true, cancelTimer = null, cancelLimit = null, clearBubble = null;
   const alerts = new Map();
   const patch = changes => view.set({ ...view.get(), ...changes });
   const valid = run => alive && current === run && run.scope === watchScope() && run.epoch === gatewayActivationEpoch();
   function stop(notice = 'Watch stopped.') {
-    current = null; cancelTimer?.(); cancelTimer = null; clearBubble?.(); clearBubble = null;
-    patch({ active: false, busy: false, notice, matches: [], fresh: [], center: null });
+    current = null; cancelTimer?.(); cancelTimer = null; cancelLimit?.(); cancelLimit = null; clearBubble?.(); clearBubble = null;
+    patch({ active: false, busy: false, notice, matches: [], fresh: [], center: null, scan: '', scanNote: '' });
+  }
+  // A watch is not left running for ever: it ends by itself and says so, in the app and, when the app is away, in a toast.
+  function expire(run) {
+    if (current !== run) return;
+    stop(`Watch ended after ${WATCH_LIMIT_MS / 3600000} hours. Press Watch to keep going.`);
+    host.notify({ kind: 'info', message: `PokeIt Hunt Watch near ${run.label} ended after ${WATCH_LIMIT_MS / 3600000} hours.` });
+    void Promise.resolve().then(() => ctx.os?.notify?.({ title: 'PokeIt! Hunt Watch ended',
+      body: `Stopped after ${WATCH_LIMIT_MS / 3600000} hours near ${run.label}. Open the PokeIt Radar to start it again.` })).catch(() => {});
+  }
+  // The watch only reads what scans have already found. Where no ongoing scan covers the spot it can see nothing new, so say so.
+  async function checkScans(run) {
+    try {
+      const data = await api('/coverage?' + new URLSearchParams({ lat: run.center.lat, lon: run.center.lon }));
+      if (!valid(run)) return;
+      const status = data?.scan_plan?.status;
+      if (!status || status === 'unavailable') return;
+      if (status === 'existing_coverage') {
+        const areas = Array.isArray(data.areas) ? data.areas.slice(0, 2).map(a => text(a, 40)).filter(Boolean).join(', ') : '';
+        patch({ scan: 'ongoing', scanNote: `Ongoing scans cover this spot${areas ? ` (${areas})` : ''}.` }); return;
+      }
+      const near = Array.isArray(data.nearest_areas) ? data.nearest_areas[0] : null;
+      const note = 'No ongoing scans cover this spot, so the watch only sees what the last scan found.'
+        + (near && number(near.distance_miles) ? ` The closest scanned area is ${text(near.name, 40)}, ${near.distance_miles} mi away.` : '');
+      patch({ scan: 'none', scanNote: note });
+      host.notify({ kind: 'warning', message: note });
+    } catch { /* the watch itself works without this check */ }
   }
   function configure(value) {
     if (current) return;
@@ -229,12 +266,11 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
       // IDs are catch observations, not species. Keep bounded memory for a long-running watch.
       for (const p of fresh) run.seen.add(p.observation_id);
       while (run.seen.size > 1024) run.seen.delete(run.seen.values().next().value);
-      const names = fresh.slice(0, 2).map(p => `${text(p.name, 35)} (${metric(p)})`).join(', ');
-      const body = `Found ${fresh.length} ${fresh.length === 1 ? 'match' : 'matches'} near ${run.label}: ${names}${fresh.length > 2 ? ` +${fresh.length - 2} more` : ''}.`;
-      const title = fresh.length === 1 ? `PokeIt: ${text(fresh[0].name, 35) || 'a catch'} nearby` : `PokeIt: ${fresh.length} catches nearby`;
-      patch({ notice: body });
-      clearBubble?.(); clearBubble = ctx.pet?.say(body, { id: 'hunt-watch', tone: 'info', ttlMs: 10000 });
-      host.notify({ kind: 'info', message: body });
+      const { title, body } = watchToast(fresh, run.label, now());
+      const plain = `${title}. ${body.replace(/\n/g, '. ')}`;
+      patch({ notice: plain });
+      clearBubble?.(); clearBubble = ctx.pet?.say(plain, { id: 'hunt-watch', tone: 'info', ttlMs: 10000 });
+      host.notify({ kind: 'info', message: plain });
       // Hosts may deliver through an asynchronous bridge. A notification failure is not a failed data read.
       void Promise.resolve().then(() => {
         if (!valid(run)) return;
@@ -251,9 +287,11 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
     stop('');
     current = { ...watchPrefs(view.get()), sid, center: { ...center }, label: text(label, 80) || 'this spot',
       scope: watchScope(), epoch: gatewayActivationEpoch(), seen: new Set() };
-    patch({ active: true, busy: false, error: '', lastChecked: null, matched: 0, matches: [], fresh: [], center: { ...center }, truncated: false, label: current.label, notice: 'Checking this spot…', notificationNote: '' });
+    patch({ active: true, busy: false, error: '', lastChecked: null, matched: 0, matches: [], fresh: [], center: { ...center }, truncated: false, label: current.label, notice: 'Checking this spot…', notificationNote: '', scan: '', scanNote: '' });
     cancelTimer = ctx.setInterval(() => { void poll(); }, 60000);
-    void poll(); return true;
+    const run = current;
+    cancelLimit = ctx.setTimeout?.(() => expire(run), WATCH_LIMIT_MS) ?? null;
+    void checkScans(run); void poll(); return true;
   }
   function reset() { stop(''); patch({ ...saved(), label: '', lastChecked: null, error: '', notice: '', notificationNote: '' }); }
   const subscriptions = [host.state.profile.subscribe(reset), host.state.connectionId?.subscribe(reset)].filter(Boolean);
@@ -458,7 +496,7 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
   const w = useValue(ctrl.watch.view);
   const field = { background: c.raised, color: c.fg, border: `1px solid ${c.line}`, borderRadius: 8, padding: '7px 8px', font: `12px ${font}` };
   const status = w.busy ? 'Checking existing observations…'
-    : w.active ? `Watching ${w.label} · 500 m. ${w.notice}` : w.notice || 'Alerts you to new catches at this spot. It reads existing data about once a minute and never starts a scan.';
+    : w.active ? `Watching ${w.label} · 500 m. ${w.notice}` : w.notice || 'Alerts you to new catches at this spot. It reads existing data about once a minute, never starts a scan, and stops by itself after 2 hours.';
   return hs('section', { 'aria-label': 'Hunt Watch', style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${c.line}` }, children: [
     hs('div', { style: { ...rowStyle, gap: 6 }, children: [
       h('strong', { style: { fontSize: 12, marginRight: 4 }, children: 'Hunt Watch' }),
@@ -469,6 +507,7 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
       h(Button, { c, primary: !w.active, disabled: !w.active && !center, onClick: () => w.active ? ctrl.watch.stop() : ctrl.watch.start(sid, center, label), children: w.active ? 'Stop' : 'Watch' })
     ] }),
     h('p', { role: 'status', style: { ...fine(c), margin: '6px 0 0' }, children: status }),
+    w.active && w.scanNote && h('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'none' ? c.accent : c.muted }, children: w.scanNote }),
     w.error && h(ErrorNote, { c, message: w.error }),
     w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
     w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' })

@@ -258,6 +258,7 @@ function watchHarness(api) {
   let time = Date.parse('2026-11-07T22:00:00Z');
   const ctx = { storage: { get: (k, fallback) => storage.get(k) ?? fallback, set: (k, v) => storage.set(k, v) },
     setInterval: (callback, ms) => { const t = { callback, ms, stopped: false }; timers.push(t); return () => { t.stopped = true; }; },
+    setTimeout: (callback, ms) => { const t = { callback, ms, stopped: false, once: true }; timers.push(t); return () => { t.stopped = true; }; },
     onEvent: (name, fn) => { events[name] = fn; }, onDispose: fn => disposers.push(fn),
     os: { notify: n => notices.push({ kind: 'os', ...n }) }, pet: { say: body => { notices.push({ kind: 'pet', body }); return () => {}; } } };
   const watch = ui.createHuntWatch(ctx, { api, now: () => time, onFound: () => {} });
@@ -283,23 +284,61 @@ test('watch filters match the chosen criterion, exact spot, live expiry and evol
 
 test('watch starts only on request, aggregates and dedupes observations, throttles two minutes and stops polling', async () => {
   let reads = 0, rows = [match('a'), match('b')];
-  const f = watchHarness(async () => { reads++; return { observations: rows, truncated: false }; });
+  const f = watchHarness(async path => { if (path.startsWith('/coverage')) return {}; reads++; return { observations: rows, truncated: false }; });
   assert.equal(reads, 0); assert.equal(f.timers.length, 0);
   assert.equal(f.watch.start('test', watchCenter, 'City Hall'), true);
   await flush(); assert.equal(reads, 1); assert.equal(f.timers[0].ms, 60000);
   assert.equal(f.notices.filter(n => n.kind === 'os').length, 1);
-  assert.match(f.notices[0].body, /Found 2 matches/);
+  assert.match(f.notices[0].body, /Nearby Dratini \(100%\) \+1 more\. Found near City Hall @ /);
   f.advance(60000); rows = [...rows, match('c')]; await f.watch.poll();
   assert.equal(f.notices.filter(n => n.kind === 'os').length, 1);
   f.advance(60000); await f.watch.poll();
   assert.equal(f.notices.filter(n => n.kind === 'os').length, 2);
-  assert.match(f.notices.filter(n => n.kind === 'os')[1].body, /Found 1 match/);
+  assert.match(f.notices.filter(n => n.kind === 'os')[1].title, /^PokeIt! Nearby Dratini \(100%\)$/);
   f.advance(120000); await f.watch.poll(); assert.equal(f.notices.filter(n => n.kind === 'os').length, 2);
   f.watch.stop(); assert.equal(f.timers[0].stopped, true);
   const before = reads; await f.watch.poll(); assert.equal(reads, before); assert.equal(f.watch.view.get().active, false);
   f.dispose();
 });
 
+test('the toast leads with the catch, then where and when, how long it lasts and a map link', () => {
+  const found = Date.parse('2026-11-09T19:30:00');
+  const one = ui.watchToast([{ ...match('toast'), name: 'Skwovet', iv_percent: 91.11, lat: 33.7601, lon: -84.3934, expires_at: '2026-11-09T19:48:00', expiry_verified: true }], 'Centennial Olympic Park, Atlanta', found);
+  assert.equal(one.title, 'PokeIt! Nearby Skwovet (91.1%)');
+  const lines = one.body.split(/\r?\n/);
+  assert.match(lines[0], /^Found near Centennial Olympic Park, Atlanta @ 7:30/);
+  assert.match(lines[1], /^Expires: 7:48/); assert.doesNotMatch(lines[1], /estimated/);
+  assert.match(lines[2], /^https:\/\/pokeit\.cc\/map\?lat=33\.7601&lon=-84\.3934/);
+  const many = ui.watchToast([match('a'), match('b'), match('c')], 'Park', found);
+  assert.match(many.title, /\+2 more$/);
+  assert.match(ui.watchToast([{ ...match('guess'), expiry_verified: false }], 'Park', found).body, /Expires: .* \(estimated\)/);
+});
+test('a watch ends by itself after two hours and says so', async () => {
+  const f = watchHarness(async path => path.startsWith('/coverage') ? {} : { observations: [], truncated: false });
+  f.watch.start('test', watchCenter, 'City Hall'); await flush();
+  const limit = f.timers.find(t => t.once);
+  assert.equal(limit.ms, 2 * 60 * 60 * 1000);
+  limit.callback(); await flush();
+  assert.equal(f.watch.view.get().active, false);
+  assert.match(f.watch.view.get().notice, /ended after 2 hours/);
+  assert.equal(f.timers.find(t => !t.once).stopped, true);
+  assert.ok(f.notices.some(n => n.kind === 'os' && /ended/.test(n.title)));
+  f.dispose();
+});
+test('the watch says whether ongoing scans cover the spot, and warns when none do', async () => {
+  const on = watchHarness(async path => path.startsWith('/coverage') ? { areas: ['GA-Atlanta'], scan_plan: { status: 'existing_coverage' } } : { observations: [] });
+  on.watch.start('test', watchCenter, 'City Hall'); await flush();
+  assert.equal(on.watch.view.get().scan, 'ongoing'); assert.match(on.watch.view.get().scanNote, /Ongoing scans cover this spot \(GA-Atlanta\)/); on.dispose();
+  const none = watchHarness(async path => path.startsWith('/coverage')
+    ? { areas: [], scan_plan: { status: 'needs_scan' }, nearest_areas: [{ name: 'PA-Philadelphia', distance_miles: 81.6 }] } : { observations: [] });
+  none.watch.start('test', watchCenter, 'City Hall'); await flush();
+  assert.equal(none.watch.view.get().scan, 'none');
+  assert.match(none.watch.view.get().scanNote, /No ongoing scans cover this spot.*PA-Philadelphia, 81\.6 mi away/);
+  assert.equal(none.watch.view.get().active, true); none.dispose();
+  const unknown = watchHarness(async path => { if (path.startsWith('/coverage')) throw Error('down'); return { observations: [] }; });
+  unknown.watch.start('test', watchCenter, 'City Hall'); await flush();
+  assert.equal(unknown.watch.view.get().scan, ''); assert.equal(unknown.watch.view.get().active, true); unknown.dispose();
+});
 test('stopping a watch ignores in-flight results, and failed polls remain visible without notification spam', async () => {
   let resolve;
   const f = watchHarness(() => new Promise(r => { resolve = r; }));
@@ -317,7 +356,7 @@ test('a rejected OS notification does not fail the successful watch read or esca
   f.ctx.os.notify = () => Promise.reject(Error('OS bridge refused'));
   f.watch.start('test', watchCenter, 'City Hall'); await flush();
   assert.equal(f.watch.view.get().error, ''); assert.equal(f.watch.view.get().matched, 1);
-  assert.match(f.watch.view.get().notice, /Found 1 match/);
+  assert.match(f.watch.view.get().notice, /Nearby Dratini/);
   assert.match(f.watch.view.get().notificationNote, /OS alerts are unavailable/);
   assert.equal(f.watch.view.get().active, true); f.dispose();
 });
