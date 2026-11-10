@@ -373,6 +373,14 @@ export function createController(ctx) {
       update(sid, { gyms: rows(d.gyms), stops: rows(d.stops) });
     } catch { /* decoration only */ }
   }
+  // A raid question turns the Radar to raids: bosses and eggs lead on the map and in the list, catches step back. Read-only.
+  async function loadRaids(sid, center, radius, generation) {
+    try {
+      const d = await api('/raids?' + new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50 }), true);
+      if (!alive || state(sid).generation !== generation) return;
+      update(sid, { raids: (Array.isArray(d?.results) ? d.results : []).filter(r => FORT_ID.test(r?.id || '') && number(r.lat) && number(r.lon)).slice(0, 50) });
+    } catch { /* the catches and gyms are still a true read */ }
+  }
   async function fillBest(highlights, center, radius) {
     if (highlights.length >= BEST_COUNT) return highlights;
     try {
@@ -395,10 +403,13 @@ export function createController(ctx) {
       else settle(sid, center, generation, tries + 1);
     }, 10000);
   }
-  async function read(sid, center, label, radius) {
+  async function read(sid, center, label, radius, wanted) {
     const s = state(sid), generation = s.generation + 1;
+    // The mode stays with the place until a question changes it; a new place starts on catches.
+    const mode = wanted || (s.center && distanceBearing(s.center, center)?.meters < 5 && s.mode === 'raids' ? 'raids' : 'catches');
     scans.delete(sid);
-    update(sid, { center, label, radius, busy: true, error: '', generation, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null, scan: null });
+    update(sid, { center, label, radius, mode, raids: [], busy: true, error: '', generation, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null, scan: null });
+    if (mode === 'raids') void loadRaids(sid, center, radius, generation);
     try {
       const params = new URLSearchParams({ lat: center.lat, lon: center.lon, radius_m: radius, limit: 50, selection: 'highlights' });
       void loadForts(sid, center, radius, generation);
@@ -513,10 +524,11 @@ export function createController(ctx) {
     const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = radiusOf(args.radius_m);
     const placeLabel = labelFor(center);
     if (scanning) { trackScan(sid, center, placeLabel || 'Search point', radius); openRadar(controller, sid, false); return; }
-    const same = s.center && distanceBearing(s.center, center)?.meters < 5 && s.radius === radius;
+    const mode = name.endsWith('find_raids') ? 'raids' : name.endsWith('find_pokemon') ? 'catches' : undefined;
+    const same = s.center && distanceBearing(s.center, center)?.meters < 5 && s.radius === radius && (!mode || (s.mode || 'catches') === mode);
     if (!same || Date.now() - lastFollow > 30000) {
       lastFollow = Date.now(); follow.reads++;
-      void read(sid, center, placeLabel || (same ? s.label : 'Search point'), radius);
+      void read(sid, center, placeLabel || (s.center && distanceBearing(s.center, center)?.meters < 5 ? s.label : 'Search point'), radius, mode);
     }
     openRadar(controller, sid, false);
   });
@@ -593,7 +605,9 @@ function HuntWatch({ ctrl, c, sid, center, label }) {
     ] }),
     h('p', { role: 'status', style: { ...fine(c), margin: '8px 0 0', fontSize: w.active || w.busy ? 12 : 13, color: w.active || w.busy ? c.muted : c.fg }, children: status }),
     !w.active && !w.busy && h('p', { style: { ...fine(c), margin: '3px 0 0', fontSize: 11 }, children: 'Checks once a minute for 2 hours. Never starts a scan.' }),
-    w.active && w.scanNote && h('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'ongoing' ? c.muted : c.accent }, children: w.scanNote }),
+    w.active && w.scanNote && hs('p', { style: { ...fine(c), margin: '6px 0 0', color: w.scan === 'ongoing' ? c.muted : c.accent }, children: [w.scanNote,
+      w.scan === 'none' && h('button', { type: 'button', onClick: () => openMap(ctrl.ctx, 'https://pokeit.cc/coverage'),
+        style: { background: 'none', border: 0, padding: 0, marginLeft: 6, color: c.accent, font: 'inherit', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }, children: 'See covered areas ↗' })] }),
     w.error && h(ErrorNote, { c, message: w.error }),
     w.notificationNote && h('p', { style: fine(c), children: w.notificationNote }),
     w.truncated && h('p', { style: fine(c), children: 'This read is a limited sample; other matches may be missing.' })
@@ -753,6 +767,7 @@ export function mapState(s, { light = false, watching = false, now = Date.now() 
   const fort = (f, extra) => ({ id: f.id, lat: f.lat, lon: f.lon, name: text(f.name, 60), ...extra });
   return { theme: light ? 'light' : 'dark', center: s.center ? { lat: s.center.lat, lon: s.center.lon } : null, radius: s.radius,
     busy: !!s.busy, watching: !!watching, selected: s.selected || null, items: live(s.observations).map(row),
+    mode: s.mode === 'raids' ? 'raids' : 'catches', raids: s.mode === 'raids' ? liveRaids(s.raids, now).map(raidPin) : [],
     gyms: forts(s.gyms).map(f => fort(f, { team: text(f.team, 10), raid: f.raid === true })),
     stops: forts(s.stops).map(f => fort(f, { lure: f.lure === true, rocket: f.rocket === true })) };
 }
@@ -785,6 +800,36 @@ function MapView({ ctrl, c, s, sid, watching = false }) {
   return h('div', { style: { height: 'clamp(320px, 52vh, 560px)', borderRadius: 12, overflow: 'hidden', border: `1px solid ${c.line}`, background: c.bg },
     children: h(Frame, { ref: frame, src, sandbox: 'allow-scripts', title: `Map of catches near ${named(s.label) || 'the search point'}`,
       style: { width: '100%', height: '100%', border: 0, display: 'block' } }) });
+}
+// Raids still running (or eggs still to hatch) at this read, nearest first as the service returned them.
+export function liveRaids(list, now) {
+  return (Array.isArray(list) ? list : []).filter(r => FORT_ID.test(r?.id || '') && number(r.lat) && number(r.lon)
+    && !(Date.parse(r.ends_at) <= now)).slice(0, 50);
+}
+const raidBoss = r => Number.isInteger(r?.pokemon_id) && r.pokemon_id > 0;
+const raidLevel = r => Number.isInteger(r?.level) && r.level > 0 && r.level < 20 ? r.level : 0;
+const raidPin = r => ({ id: r.id, lat: r.lat, lon: r.lon, gym: text(r.name, 60), name: raidBoss(r) ? text(r.pokemon_name, 40) : 'Egg',
+  pokemon_id: raidBoss(r) ? r.pokemon_id : 0, form: raidBoss(r) && Number.isInteger(r.form) && r.form > 0 && r.form < 10000 ? r.form : 0,
+  level: raidLevel(r), ends: Number.isFinite(Date.parse(r.ends_at)) ? Date.parse(r.ends_at) : null });
+export function raidLine(r, now) {
+  const boss = raidBoss(r), until = Date.parse(boss ? r.ends_at : r.starts_at), left = Number.isFinite(until) ? Math.floor((until - now) / 1000) : null;
+  const clock = left !== null && left > 0 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : null;
+  const slots = Number.isInteger(r.available_slots) ? (r.available_slots > 0 ? `${r.available_slots} open ${r.available_slots === 1 ? 'slot' : 'slots'}` : 'gym full') : null;
+  return { title: boss ? text(r.pokemon_name, 40) || 'Raid boss' : `${raidLevel(r) ? `Tier ${raidLevel(r)} ` : ''}egg`,
+    detail: [text(r.name, 50), number(r.distance_m) && amount(r.distance_m), slots].filter(Boolean).join(' · '),
+    timer: clock ? (boss ? `${clock} left` : `hatches in ${clock}`) : '' };
+}
+function RaidRow({ ctrl, c, r, now }) {
+  const line = raidLine(r, now), boss = raidBoss(r);
+  return hs('div', { style: { display: 'grid', gridTemplateColumns: '40px 1fr auto', alignItems: 'center', gap: 10, color: c.fg, font: `13px ${font}`, borderRadius: 10, padding: '6px 8px' }, children: [
+    boss ? h(Mon, { ctrl, c, p: { pokemon_id: r.pokemon_id, form: r.form, name: r.pokemon_name }, size: 40 })
+      : h('img', { alt: '', width: 36, height: 36, draggable: false, src: `https://pokeit.cc/assets/bigfunOutline/raid/egg/${raidLevel(r) || 1}.webp?w=64`, style: { display: 'block', margin: '0 2px' } }),
+    hs('span', { style: { minWidth: 0 }, children: [
+      hs('strong', { style: { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: [line.title, raidLevel(r) > 0 && boss && h('span', { style: { color: c.accent, fontWeight: 700, marginLeft: 6, fontSize: 11 }, children: `Tier ${raidLevel(r)}` })] }),
+      h('span', { style: { ...fine(c), display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: line.detail })
+    ] }),
+    h('span', { style: { fontVariantNumeric: 'tabular-nums', fontSize: 12, color: c.muted, whiteSpace: 'nowrap' }, children: line.timer })
+  ] });
 }
 function ResultRow({ ctrl, c, p, center, selected, now, onSelect, isNew = false }) {
   const timer = expiry(p, now), d = distanceBearing(center, p), hl = highlight(p, c);
@@ -881,7 +926,8 @@ function RadarPane({ ctrl, sessionId }) {
   const next = watching && w.lastChecked ? Math.max(0, 60 - Math.floor((now - w.lastChecked) / 1000)) : null;
   const notice = radarNotice({ busy: s.busy, queriedAt: s.queriedAt, quietPick: s.quietPick, watching, shown, live, ageSeconds: age });
   const stale = !watching && age !== null && age >= STALE_AFTER_S;
-  const raids = s.gyms.filter(g => g?.raid === true).length;
+  const raidMode = s.mode === 'raids', raidRows = raidMode ? liveRaids(s.raids, now) : [];
+  const raids = raidMode ? raidRows.length : s.gyms.filter(g => g?.raid === true).length;
   const landmarks = [s.gyms.length && `${s.gyms.length} ${s.gyms.length === 1 ? 'gym' : 'gyms'}`, raids && `${raids} ${raids === 1 ? 'raid' : 'raids'}`, s.stops.length && `${s.stops.length} Pokéstops`].filter(Boolean).join(' · ');
   return hs('section', { 'aria-label': 'PokeIt Radar', style: { background: c.surface, color: c.fg, padding: 14, overflowY: 'auto', height: '100%', fontFamily: font, boxSizing: 'border-box' }, children: [
     h(Styles, {}),
@@ -925,8 +971,13 @@ function RadarPane({ ctrl, sessionId }) {
             children: 'See this area on the PokeIt live map ↗' })
         ] }),
         hs('div', { style: { minWidth: 0 }, children: [
-          notice && h('p', { role: 'status', style: { ...fine(c), marginTop: 0 }, children: notice }),
-          selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
+          raidMode && hs('div', { 'aria-label': 'Raids in this read', children: [
+            h('p', { role: 'status', style: { margin: '0 0 6px', fontSize: 15, fontWeight: 750 }, children: raidRows.length ? `${raidRows.length} ${raidRows.length === 1 ? 'raid' : 'raids'} ${place ? 'near ' + place : 'here'}` : s.busy ? 'Reading raids…' : 'No raids or eggs in this read.' }),
+            h('div', { style: { maxHeight: 340, overflowY: 'auto', display: 'grid', gap: 2, ...panel(c), background: c.bg, padding: 6 }, children: raidRows.map(r => h(RaidRow, { ctrl, c, r, now }, r.id)) }),
+            live.length > 0 && h('p', { style: { ...fine(c), margin: '12px 0 4px' }, children: 'Catches here' })
+          ] }),
+          !raidMode && notice && h('p', { role: 'status', style: { ...fine(c), marginTop: 0 }, children: notice }),
+          !raidMode && selected && h('div', { style: { ...panel(c), background: c.bg }, children: h(CatchSummary, { ctrl, c, p: selected, center: s.center, sid, place, inPane: true }) }),
           live.length > 1 && h('div', { 'aria-label': watching ? 'Catches on watch' : 'Catches in this read', style: { marginTop: 10, maxHeight: 300, overflowY: 'auto', display: 'grid', gap: 2 },
             children: live.map(p => h(ResultRow, { ctrl, c, p, center: s.center, now, isNew: fresh.has(p.observation_id), selected: s.selected === p.observation_id, onSelect: () => ctrl.update(sid, { selected: p.observation_id }) }, p.observation_id)) })
         ] })

@@ -31,7 +31,7 @@
 
   var state = null, placeKey = '', listSig = '', markers = new Map(), known = new Set();
   var spot = null, ring = null, label = null, fortSig = '', sweep = null, walk = null, userMoved = false;
-  var fortLayer = L.layerGroup().addTo(map), layer = L.layerGroup().addTo(map);
+  var fortLayer = L.layerGroup().addTo(map), layer = L.layerGroup().addTo(map), raidLayer = L.layerGroup().addTo(map), raidSig = '';
 
   function ringBounds() { return L.latLng(state.center.lat, state.center.lon).toBounds(state.radius * 2); }
   function fit() { if (state && state.center) { userMoved = false; map.fitBounds(ringBounds(), { padding: [30, 30], animate: false }); } }
@@ -111,9 +111,9 @@
   function addMarker(p, big) {
     var el = document.createElement('div');
     {
-      el.className = 'pin' + (known.size && !known.has(p.id) ? ' is-new' : '');
+      el.className = 'pin' + (big ? '' : ' pin--small') + (known.size && !known.has(p.id) ? ' is-new' : '');
       el.appendChild(art(p));
-      if (p.tag) {
+      if (p.tag && big) {
         var tag = document.createElement('span');
         tag.className = 'pin__tag' + (p.tag === 'PvP #1' ? ' pin__tag--pvp' : p.tag === 'Nundo' ? ' pin__tag--nundo' : '');
         tag.textContent = p.tag === 'Hundo' ? '100%' : p.tag; el.appendChild(tag);
@@ -121,11 +121,30 @@
     }
     var title = str(p.name, 40) + (num(p.iv) ? ' · ' + Math.round(p.iv * 10) / 10 + '% IV' : '');
     var m = L.marker([p.lat, p.lon], { title: '', alt: title, zIndexOffset: big ? 200 : 0,
-      icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: big ? [46, 46] : [19, 19], iconAnchor: big ? [23, 23] : [9.5, 9.5] }) });
-    m.bindTooltip(title, { direction: 'top', offset: [0, big ? -21 : -8] });
+      icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: big ? [40, 40] : [20, 20], iconAnchor: big ? [20, 20] : [10, 10] }) });
+    m.bindTooltip(title, { direction: 'top', offset: [0, big ? -18 : -9] });
     m.on('click', function (e) { L.DomEvent.stopPropagation(e); choose(p.id); });
     m.addTo(layer);
     markers.set(p.id, { marker: m, el: el, big: big, expires: num(p.expires) ? p.expires : null, verified: p.verified === true });
+  }
+  // A raid question: bosses and eggs lead, at the gym they are on. They are not selectable; the list beside the map has the details.
+  function addRaid(r) {
+    var el = document.createElement('div'), img = document.createElement('img'), tried = 0;
+    el.className = 'pin pin--raid';
+    img.alt = ''; img.draggable = false; img.decoding = 'async';
+    var egg = 'https://pokeit.cc/assets/bigfunOutline/raid/egg/' + (r.level || 1) + '.webp?w=64', base = ICONS + r.pokemon_id + '.webp?w=64';
+    img.src = !r.pokemon_id ? egg : r.form ? ICONS + r.pokemon_id + '_f' + r.form + '.webp?w=64' : base;
+    img.addEventListener('error', function () {
+      if (r.pokemon_id && r.form && !tried) { tried = 1; img.src = base; return; }
+      if (tried < 2) { tried = 2; img.src = egg; }
+    });
+    el.appendChild(img);
+    var tag = document.createElement('span'); tag.className = 'pin__tag pin__tag--raid';
+    tag.textContent = (r.pokemon_id ? 'Raid' : 'Egg') + (r.level ? ' ' + r.level : ''); el.appendChild(tag);
+    var title = (r.pokemon_id ? str(r.name, 40) + ' raid' : 'Raid egg') + (str(r.gym, 60) ? ' · ' + str(r.gym, 60) : '');
+    L.marker([r.lat, r.lon], { title: '', alt: title, keyboard: false, zIndexOffset: 400,
+      icon: L.divIcon({ className: 'pin-wrap', html: el, iconSize: [44, 44], iconAnchor: [22, 22] }) })
+      .bindTooltip(title, { direction: 'top', offset: [0, -20] }).addTo(raidLayer);
   }
   function select(id) {
     markers.forEach(function (m, key) {
@@ -166,14 +185,20 @@
     drawForts(next.gyms, next.stops);
     var items = clean(next.items);
     // Redraw the catches only when the list changed, so a selection does not make icons blink.
-    var watching = next.watching === true;
-    var sig = JSON.stringify([key, watching, items.map(function (p) { return [p.id, p.tag, p.expires]; })]);
+    var watching = next.watching === true, raidMode = next.mode === 'raids';
+    root.classList.toggle('is-raids', raidMode);
+    var raids = raidMode ? (Array.isArray(next.raids) ? next.raids : []).filter(function (r) {
+      return r && FORT.test(r.id) && num(r.lat) && num(r.lon) && Math.abs(r.lat) <= 85 && Math.abs(r.lon) <= 180; }).slice(0, 50) : [];
+    var raidKey = JSON.stringify(raids.map(function (r) { return [r.id, r.pokemon_id, r.form, r.level]; }));
+    if (raidKey !== raidSig) { raidSig = raidKey; raidLayer.clearLayers(); raids.forEach(addRaid); }
+    var sig = JSON.stringify([key, watching, raidMode, items.map(function (p) { return [p.id, p.tag, p.expires]; })]);
     if (sig === listSig) { select(state.selected); return; }
     listSig = sig;
     markers.forEach(function (m) { layer.removeLayer(m.marker); });
     markers = new Map();
     // Hunt Watch can match dozens: the first six (the best, in the order the plugin sends) stay large, the rest are small.
-    items.forEach(function (p, i) { if (!markers.has(p.id)) { addMarker(p, !watching || i < 6); } });
+    // On a raid question the catches step back: all small, behind the raids.
+    items.forEach(function (p, i) { if (!markers.has(p.id)) { addMarker(p, !raidMode && (!watching || i < 6)); } });
     if (next.busy !== true) { items.forEach(function (p) { known.add(p.id); }); }
     select(state.selected); tick();
   }

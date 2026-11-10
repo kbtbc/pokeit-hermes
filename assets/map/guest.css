@@ -35,9 +35,9 @@ body { font: 13px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 
 /* catches */
 .pin-wrap { background: none; border: 0; }
-.pin { position: relative; width: 46px; height: 46px; display: grid; place-items: center; cursor: pointer; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); transition: transform 0.15s ease; }
-.pin img { width: 41px; height: 41px; object-fit: contain; transition: scale 0.15s ease; }
-.pin__letter { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--navy-raised); border: 2px solid var(--amber); color: var(--text); font-weight: 750; }
+.pin { position: relative; width: 40px; height: 40px; display: grid; place-items: center; cursor: pointer; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); transition: transform 0.15s ease; }
+.pin img { width: 36px; height: 36px; object-fit: contain; transition: scale 0.15s ease; }
+.pin__letter { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--navy-raised); border: 2px solid var(--amber); color: var(--text); font-weight: 750; }
 .pin:hover { transform: translateY(-2px); }
 .pin.is-new { animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -55,7 +55,16 @@ body { font: 13px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 .fort { display: grid; place-items: center; }
 /* Leaflet sizes marker images itself (width: auto), so these two rules have to out-rank it. */
 .leaflet-container .leaflet-marker-pane .fort img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.leaflet-container .leaflet-marker-pane .pin img { width: 49px; height: 49px; }
+.leaflet-container .leaflet-marker-pane .pin img { width: 43px; height: 43px; }
+/* Small catches: the rest of a long watch list, and every catch while a raid question leads. */
+.pin.pin--small { width: 20px; height: 20px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+.leaflet-container .leaflet-marker-pane .pin.pin--small img { width: 22px; height: 22px; }
+.pin.pin--small .pin__letter { width: 16px; height: 16px; font-size: 9px; border-width: 1px; }
+.is-raids .pin:not(.pin--raid) { opacity: 0.5; }
+/* Raid bosses and eggs lead on a raid question. */
+.pin.pin--raid { width: 44px; height: 44px; cursor: default; }
+.leaflet-container .leaflet-marker-pane .pin.pin--raid img { width: 46px; height: 46px; }
+.pin__tag--raid { background: #FF6B6B; color: #fff; }
 .fort--stop { width: 13px; height: 13px; opacity: 0.7; }
 .fort--gym { width: 24px; height: 24px; opacity: 0.95; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
 .fort__shape { width: 60%; height: 60%; border-radius: 50%; background: #5BC8F5; border: 1px solid #0A1633; }

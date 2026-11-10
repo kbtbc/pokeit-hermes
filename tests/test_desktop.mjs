@@ -555,7 +555,7 @@ for (const tool of ['find_raids', 'find_gyms', 'find_showcases', 'find_max_battl
     assert.equal(f.ctrl.state('test').label, 'Alpharetta Library, Alpharetta');
     f.events['tool.complete'](find(34.0746, { radius_m: 371 })); await flush();
     assert.equal(f.ctrl.state('test').label, 'Alpharetta City Hall, Alpharetta');
-    assert.ok(paths.every(p => /^\/(nearby|coverage|forts|health)(\?|$)/.test(p)));
+    assert.ok(paths.every(p => /^\/(nearby|coverage|forts|health|raids)(\?|$)/.test(p)));
     assert.equal(f.ctrl.state('test').scan, null);
     host.state.focusedSessionId.set('test');
   });
@@ -605,6 +605,28 @@ test('a scan with 45 of 49 points in is read without waiting for the last ones',
   await f.timeouts.shift().cb(); await flush();
   assert.equal(paths.some(p => p.startsWith('/nearby')), true);
   assert.equal(f.ctrl.state('test').scan, null);
+});
+
+test('a raid question turns the Radar to raids, a catch question turns it back, and raid rows read plainly', async () => {
+  host.openWorkspace = () => {};
+  const paths = [], ends = new Date(Date.now() + 20 * 60000).toISOString();
+  const raid = { id: 'gym1.16', name: 'CNN Center', lat: 33.76, lon: -84.39, distance_m: 280, pokemon_id: 888, pokemon_name: 'Zacian', form: 2576, level: 5, available_slots: 2, ends_at: ends };
+  const f = followHarness(async path => { paths.push(path);
+    return { ok: true, data: path.startsWith('/raids') ? { results: [raid, { ...raid, id: 'gone.16', ends_at: '2020-01-01T00:00:00Z' }, { id: 'bad id' }] }
+      : path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-10T06:00:00Z' } : {} }; });
+  const call = tool => f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__' + tool, args: { lat: 33.7601, lon: -84.3934, radius_m: 500 } } });
+  call('find_pokemon'); await flush();
+  assert.equal(f.ctrl.state('test').mode, 'catches'); assert.equal(paths.some(p => p.startsWith('/raids')), false);
+  call('find_raids'); await flush();                                   // same spot, seconds later: the mode change alone makes it read again
+  assert.equal(f.ctrl.state('test').mode, 'raids');
+  assert.ok(paths.some(p => p.startsWith('/raids?') && p.includes('radius_m=500')));
+  assert.equal(ui.liveRaids(f.ctrl.state('test').raids, Date.now()).length, 1);
+  const line = ui.raidLine(raid, Date.now());
+  assert.equal(line.title, 'Zacian'); assert.equal(line.detail, 'CNN Center · 280 m · 2 open slots'); assert.match(line.timer, /^(1\d|20):\d\d left$/);
+  const egg = ui.raidLine({ ...raid, pokemon_id: null, pokemon_name: null, available_slots: 0, starts_at: ends }, Date.now());
+  assert.equal(egg.title, 'Tier 5 egg'); assert.match(egg.detail, /gym full$/); assert.match(egg.timer, /^hatches in (1\d|20):\d\d$/);
+  call('find_pokemon'); await flush();
+  assert.equal(f.ctrl.state('test').mode, 'catches'); assert.equal(f.ctrl.state('test').raids.length, 0);
 });
 
 test('the scan line counts points and offers the partial read only after four minutes', () => {
