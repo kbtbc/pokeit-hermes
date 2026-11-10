@@ -123,9 +123,9 @@ test('standalone Radar follow-ups include the named place and precise map pin', 
   const raids = ui.followUpQuestion('raids', s);
   assert.match(raids, /Alpharetta City Hall/);
   assert.doesNotMatch(raids, /https:/);                                  // a named place resolves by itself
-  assert.match(raids, /Keep eggs separate/);
+  assert.equal(raids, 'What raids and eggs are on near Alpharetta City Hall right now?');
   assert.equal(ui.followUpQuestion('events', s), 'What events are on today, and do they matter for the spawns near Alpharetta City Hall?');
-  assert.match(ui.followUpQuestion('raids', { ...s, label: 'Search point' }), /near this map pin\? Keep eggs separate\. Use this search area: https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
+  assert.match(ui.followUpQuestion('raids', { ...s, label: 'Search point' }), /What raids and eggs are on near this map pin right now\? Use this search area: https:\/\/pokeit\.cc\/map\?lat=34.0746&lon=-84.2922/);
   assert.equal(ui.followUpQuestion('raids', { center: null }), null);
 });
 test('the catches follow-up is a plain question: cards stay opt-in, so the chat is not filled with large cards', () => {
@@ -523,6 +523,43 @@ test('going back to an earlier place shows that place\'s name, not the last one 
   find(30.2746912, -97.7405171); await flush();                          // a point nobody named
   assert.equal(f.ctrl.state('test').label, 'Search point');
 });
+
+for (const tool of ['find_raids', 'find_gyms', 'find_showcases', 'find_max_battles', 'find_pokestops']) {
+  test(`${tool} opens the Radar at the named spot, with the supplied ring or the default`, async () => {
+    const opened = [], paths = [];
+    host.openWorkspace = (name, options) => opened.push({ name, options });
+    host.state.focusedStoredSessionId.set('test'); host.state.focusedSessionId.set('runtime-raids');
+    const f = followHarness(async path => { paths.push(path); return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-10T06:00:00Z' } : {} }; });
+    const resolve = (query, session_id = 'test') => f.events['tool.complete']({ session_id,
+      payload: { name: 'mcp__pokeit__resolve_location', args: { query, locality: 'Alpharetta' } } });
+    const find = (lat, extra = {}, session_id = 'test') => ({ session_id,
+      payload: { name: `mcp__pokeit__${tool}`, args: { lat, lon: -84.2922, ...extra } } });
+    resolve('Alpharetta City Hall');
+    resolve('Some other place', 'background-chat');                     // must not steal the focused chat's label
+    f.events['tool.complete'](find(34.0746, { radius_m: 371 }, 'runtime-raids')); await flush();
+    assert.equal(opened.at(-1).name, 'pokeit:radar');
+    assert.equal(f.ctrl.state('test').center.lat, 34.0746);
+    assert.equal(f.ctrl.state('test').label, 'Alpharetta City Hall, Alpharetta');
+    assert.equal(f.ctrl.state('test').radius, 371);
+    assert.ok(paths.some(p => p.startsWith('/nearby?') && p.includes('radius_m=371')));
+    const before = paths.length, panes = opened.length;
+    for (const event of [find(34.1, {}, 'background-chat'), { ...find(34.1), replayed: true },
+      find('34.1'), find(86), find(34.1, { lon: 181 }), find(34.1, { lon: NaN }),
+      { session_id: 'test', payload: { name: 'mcp__other__'+tool, args: { lat: 34.1, lon: -84.29 } } }]) {
+      f.events['tool.complete'](event); await flush();
+    }
+    assert.equal(paths.length, before); assert.equal(opened.length, panes);
+    resolve('Alpharetta Library');
+    f.events['tool.complete'](find(34.077)); await flush();
+    assert.equal(f.ctrl.state('test').radius, 500);
+    assert.equal(f.ctrl.state('test').label, 'Alpharetta Library, Alpharetta');
+    f.events['tool.complete'](find(34.0746, { radius_m: 371 })); await flush();
+    assert.equal(f.ctrl.state('test').label, 'Alpharetta City Hall, Alpharetta');
+    assert.ok(paths.every(p => /^\/(nearby|coverage|forts|health)(\?|$)/.test(p)));
+    assert.equal(f.ctrl.state('test').scan, null);
+    host.state.focusedSessionId.set('test');
+  });
+}
 
 test('a scan the agent starts shows its progress in the Radar and the spot is read when the plan is covered', async () => {
   host.openWorkspace = () => {};

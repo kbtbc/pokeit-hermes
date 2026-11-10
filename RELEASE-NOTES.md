@@ -2,6 +2,7 @@
 
 ## Unreleased · November 10, 2026 (ET)
 
+- The Radar now follows raid, gym, showcase, Max Battle and PokéStop questions as well as catches; **Raids nearby** asks for raids and eggs right now.
 - The sample questions use the Georgia Aquarium in Atlanta and the Gateway Arch in St. Louis. The empty Radar's examples say which ones answer at once ("live now") and which need a scan ("fresh scan").
 - README: restart Hermes after an install or update. A Desktop that was not restarted can open chats without the PokeIt tools, and the Radar cannot follow those. The skill now tells the agent to say so instead of reaching the service another way.
 - Fix: after a scan the agent reads 371 m but the Radar read 500 m, so the two listed different catches. The Radar now reads the ring the agent read and offers it in the Ring menu.

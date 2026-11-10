@@ -505,10 +505,11 @@ export function createController(ctx) {
     const payload = event?.payload, name = typeof payload?.name === 'string' ? payload.name : '', args = payload?.args || {};
     if (!alive || !/pokeit/i.test(name)) return;
     if (event?.replayed) { follow.replayed++; return; }
-    if (name.endsWith('resolve_location')) { lastPlace = { at: Date.now(), label: [text(args.query, 60), text(args.locality, 40)].filter(Boolean).join(', ') }; return; }
-    const finds = name.endsWith('find_pokemon'), scanning = name.endsWith('request_scan');
-    if (!(finds || scanning) || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
     if (!inFocusedChat(event)) { follow.other_chat++; return; }
+    if (name.endsWith('resolve_location')) { lastPlace = { at: Date.now(), label: [text(args.query, 60), text(args.locality, 40)].filter(Boolean).join(', ') }; return; }
+    const finds = ['find_pokemon', 'find_raids', 'find_gyms', 'find_showcases', 'find_max_battles', 'find_pokestops'].some(tool => name.endsWith(tool)),
+      scanning = name.endsWith('request_scan');
+    if (!(finds || scanning) || !number(args.lat) || !number(args.lon) || Math.abs(args.lat) > 85 || Math.abs(args.lon) > 180) return;
     const sid = activeSession(), s = state(sid), center = { lat: args.lat, lon: args.lon }, radius = radiusOf(args.radius_m);
     const placeLabel = labelFor(center);
     if (scanning) { trackScan(sid, center, placeLabel || 'Search point', radius); openRadar(controller, sid, false); return; }
@@ -555,7 +556,7 @@ export function followUpQuestion(kind, s) {
   const named = !!s.label && !['Choose a spot', 'Search point'].includes(s.label);
   const place = named ? `near ${s.label}` : 'near this map pin';
   const question = kind === 'catches' ? `What's worth catching ${place} right now?`
-    : kind === 'raids' ? `What raids are on ${place}? Keep eggs separate.`
+    : kind === 'raids' ? `What raids and eggs are on ${place} right now?`
     : kind === 'gyms' ? `Which gyms ${place} have open slots?`
     : `What events are on today, and do they matter for the spawns ${place}?`;
   // A named place resolves by itself. Only a bare pin needs its link, so the agent reads the same point.
