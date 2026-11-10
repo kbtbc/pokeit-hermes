@@ -627,6 +627,14 @@ test('a raid question turns the Radar to raids, a catch question turns it back, 
   assert.equal(egg.title, 'Tier 5 egg'); assert.match(egg.detail, /gym full$/); assert.match(egg.timer, /^hatches in (1\d|20):\d\d$/);
   call('find_pokemon'); await flush();
   assert.equal(f.ctrl.state('test').mode, 'catches'); assert.equal(f.ctrl.state('test').raids.length, 0);
+  // A scan somewhere else must not keep this place's raid list on screen under the new name.
+  call('find_raids'); await flush();
+  assert.equal(f.ctrl.state('test').raids.length > 0, true);
+  f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__request_scan', args: { lat: 40.7055641, lon: -74.0134436 } } });
+  assert.equal(f.ctrl.state('test').mode, 'catches'); assert.equal(f.ctrl.state('test').raids.length, 0);
+  assert.equal(f.ctrl.state('test').center.lat, 40.7055641);
+  assert.equal(ui.safeMapUrl('https://pokeit.cc/coverage'), 'https://pokeit.cc/coverage');
+  assert.equal(ui.safeMapUrl('https://pokeit.cc/coverage/x'), null); assert.equal(ui.safeMapUrl('https://example.com/coverage'), null);
 });
 
 test('the scan line counts points and offers the partial read only after four minutes', () => {

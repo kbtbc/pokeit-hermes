@@ -3,7 +3,7 @@ import * as sdk from '@hermes/plugin-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.21';
+const VERSION = '0.1.22';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -61,7 +61,7 @@ export function safeMapUrl(value) {
   try {
     const u = new URL(value);
     return u.origin === ORIGIN && !u.username && !u.password &&
-      (/^\/map\/?$/.test(u.pathname) || /^\/(?:pokemon|gym|pokestop)\/[A-Za-z0-9_-]+$/.test(u.pathname)) ? u.href : null;
+      (/^\/(?:map|coverage)\/?$/.test(u.pathname) || /^\/(?:pokemon|gym|pokestop)\/[A-Za-z0-9_-]+$/.test(u.pathname)) ? u.href : null;
   } catch { return null; }
 }
 export function distanceBearing(center, p) {
@@ -434,7 +434,7 @@ export function createController(ctx) {
     const moved = !s.center || distanceBearing(s.center, center)?.meters > 5;
     // A late refresh from the previous point must not undo this explicit selection.
     update(sid, { generation: s.generation + 1, busy: false, error: '' });
-    if (moved) update(sid, { center, gyms: [], stops: [], label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
+    if (moved) update(sid, { center, gyms: [], stops: [], mode: 'catches', raids: [], label: text(place, 80) || (origin ? 'Search point' : text(observation.name, 60)), queriedAt: new Date().toISOString(), coverage: null });
     const targetDistance = distanceBearing(center, observation)?.meters || 0;
     if (targetDistance > s.radius) update(sid, { radius: [250, 500, 1000, 2000].find(n => n >= targetDistance) || 2000 });
     const list = moved ? [] : s.observations.filter(p => p.observation_id !== observation.observation_id);
@@ -474,7 +474,8 @@ export function createController(ctx) {
     if (typeof ctx.setTimeout !== 'function') return;
     const token = {}, startedAt = Date.now(), generation = state(sid).generation + 1;
     scans.set(sid, token); follow.scans_tracked++;
-    update(sid, { generation, center, label, radius, observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null, error: '', busy: false,
+    // A scan is a new place: nothing from the last one (its catches, its raid list) may stay on screen under the new name.
+    update(sid, { generation, center, label, radius, mode: 'catches', raids: [], observations: [], gyms: [], stops: [], selected: null, queriedAt: null, coverage: null, error: '', busy: false,
       scan: { done: 0, total: 49, since: startedAt, seen: false } });
     void loadForts(sid, center, radius, generation);
     const finish = () => { scans.delete(sid); void read(sid, center, label, radius); };

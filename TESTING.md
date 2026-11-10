@@ -1,4 +1,4 @@
-# Testing PokeIt 0.1.21
+# Testing PokeIt 0.1.22
 
 About 20 minutes. You need Hermes Desktop 0.23.0 or newer (the status bar shows `client v0.23.0`; if it says v0.22.x, update Hermes first) and a model that can call tools. Data is US-only for now; the Atlanta and Alpharetta/Roswell areas are the best covered, and [pokeit.cc/coverage](https://pokeit.cc/coverage) shows all of them.
 

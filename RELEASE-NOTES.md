@@ -1,5 +1,11 @@
 # PokeIt release notes
 
+## 0.1.22 · November 10, 2026 (ET)
+
+- Fix: after a raid question, a scan at a new place kept the old place's raid list on the Radar under the new place's name. A scan now starts the Radar clean.
+- Fix: "See covered areas ↗" in the watch warning did nothing; it now opens pokeit.cc/coverage.
+- The skill is firmer that the answer keeps the tools' order and that no line of a general answer names a PvP league or rank other than #1.
+
 ## 0.1.21 · November 10, 2026 (ET)
 
 - Fix: with Hermes's right-hand panel open, a second, narrow copy of the Radar appeared beside the first. The Radar is now one workspace tab only.
