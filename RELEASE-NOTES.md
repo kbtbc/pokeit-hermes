@@ -9,7 +9,8 @@
 - Hunt Watch sits under the map in its own panel, says what it is watching for, and no longer prints a bare map link. The desktop alert drops the link too: clicking it opens the catch in the Radar.
 - Radar buttons write a short question. A named place no longer carries a map link, **Best catches** no longer asks for catch cards (ask for "PokeIt cards" to get them), and **Events today** asks about today's events for the spawns at the spot. The Radar has one **Open live map** button; the chat card's second button is **Open Radar**.
 - Map icons are a little smaller and the map leaves room for icons that sit on the ring. Timers in the list say "left". The footer is one quiet line.
-- The skill keeps the service's order for the catch list, so the chat and the Radar agree more often.
+- Fix: when the chat went back to an earlier place, the Radar, its card and a Hunt Watch alert showed the name of the last place instead.
+- The skill keeps the service's order for the catch list, so the chat and the Radar agree more often. It no longer says a catch has despawned just because it dropped out of the list, and does not run code to convert times.
 
 ## 0.1.19 · November 9, 2026 (ET)
 
