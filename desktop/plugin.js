@@ -16,7 +16,7 @@ const RADII = [100, 250, 500, 1000, 2000];
 export const radiusOf = n => Number.isFinite(n) && n >= 50 && n <= 2000 ? Math.round(n) : 500;
 const BEST_COUNT = 4;  // how many catches the chat answer lists, and so how many the Radar shows by default
 // The "live now" examples sit inside ongoing coverage, so they answer at once. A "fresh scan" one needs a scan, which Hermes asks the player to approve.
-const EXAMPLES = [['the Georgia Aquarium in Atlanta', 'live now'], ['the Texas State Capitol in Austin', 'live now'], ['Bethesda Terrace in Central Park, New York', 'fresh scan']];
+const EXAMPLES = [['the Georgia Aquarium in Atlanta', 'live now'], ['the Gateway Arch in St. Louis', 'live now'], ['Bethesda Terrace in Central Park, New York', 'fresh scan']];
 const FORT_ID = /^[A-Za-z0-9._-]{1,80}$/;
 const empty = () => ({ center: null, label: 'Choose a spot', radius: 500, observations: [], gyms: [], stops: [], selected: null,
   queriedAt: null, coverage: null, busy: false, error: '', truncated: false, generation: 0, scan: null });
