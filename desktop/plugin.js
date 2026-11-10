@@ -272,7 +272,7 @@ export function createHuntWatch(ctx, { api, onFound, now = () => Date.now() }) {
       while (run.seen.size > 1024) run.seen.delete(run.seen.values().next().value);
       const { title, body } = watchToast(fresh, run.label, now());
       const plain = `${title}. ${body.replace(/\n/g, '. ')}`;
-      patch({ notice: plain });
+      patch({ notice: `${title}. ${body.split('\n').slice(0, 2).join('. ')}` });  // the pane lists the catch itself, so no link line here
       clearBubble?.(); clearBubble = ctx.pet?.say(plain, { id: 'hunt-watch', tone: 'info', ttlMs: 10000 });
       host.notify({ kind: 'info', message: plain });
       // Hosts may deliver through an asynchronous bridge. A notification failure is not a failed data read.
