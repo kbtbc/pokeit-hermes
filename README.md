@@ -79,7 +79,9 @@ Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering
 ## What leaves your machine
 
 - Each tool call sends coordinates, place text and filters to `https://mcp.pokeit.cc`, which PokeIt runs. No files, credentials or conversation text are sent. Desktop uses the same host through a read-only Python proxy in your Hermes gateway, with a short in-memory cache, and the proxy also loads species icons from `https://pokeit.cc/assets`; no location goes with an icon request. Opening a map link opens `https://pokeit.cc` in your browser.
+- The embedded Radar map loads tiles directly from `https://tile.openstreetmap.org` and icons from `https://pokeit.cc/assets`. Tile requests reveal the displayed map area and your network address to the tile provider.
 - The service keeps tool names, filters, timings and result counts for about 14 days. A scan request keeps its coordinates and request ID for 24 hours, plus a keyed hash of your network address (not the address) to apply the trial limit. Ordinary web logs hold IP, path, time and status.
+- The plugin sends no separate analytics events or place-search diagnostics header. The hosted service's operational request logging is described above; it is not disabled by removing that header.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
 - The Radar saves your last spot and radius, and the watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.
