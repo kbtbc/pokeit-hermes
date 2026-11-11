@@ -17,21 +17,25 @@ Ask Hermes what's worth catching near you. A live radar opens beside the chat wi
 
 ## Install
 
-Needs Hermes Agent 0.23.0 or newer (`hermes --version`; update with `hermes update`).
+**Before you start:** PokeIt requires Hermes 0.23.0 or newer (`hermes --version`; update with `hermes update`) with a configured model that supports tools. PokeIt needs no separate account or API key; your normal Hermes model usage still applies. Install and enable the plugin in the profile you'll use, then open a new chat.
 
 ```sh
-hermes plugins install kbtbc/pokeit-hermes
+hermes plugins install kbtbc/pokeit-hermes --enable
 ```
 
-On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead.
+`--enable` matters: without it Hermes asks "Enable now? [y/N]", and pressing Enter (or an agent running the command for you) leaves the plugin installed but off. On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead, then switch it on.
 
-**Then restart Hermes and open a new chat.** On Desktop, quit the app and start it again. A chat that was open during the install, or a Desktop that was not restarted, does not have the PokeIt tools yet, and the Radar cannot follow it.
+**Check it took:** `hermes plugins list` shows `pokeit` as enabled, and on Desktop **Capabilities → Plugins → PokeIt** shows "pokeit: connected" with both the **Desktop** and profile switches on. Then quit and reopen Hermes Desktop and start a new chat; a chat that was open during the install does not have the tools.
 
-**Updating from an older PokeIt?** Hermes keeps background processes running after you quit the app, and they hold on to the old version. After `hermes plugins update pokeit` (or a remove and install), restart your computer, or the machine your Hermes backend runs on, before you open Hermes again. If the Radar says Hermes is still running an older PokeIt, that is the fix. Keep one PokeIt install: a second copy in another profile or under another name fights the first.
+The plugin has two halves. The agent half (tools, skill and the Radar's small read backend) lives in the Hermes gateway of the profile you chat in, which may be on another machine. The Desktop half (the Radar) is copied into the Hermes Desktop app. Enable PokeIt in the gateway and profile that serve your chat.
 
-Update with `hermes plugins update pokeit`. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
+Update with `hermes plugins update pokeit` in that same profile, then restart that gateway and reopen Hermes Desktop. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
 
-*Optional:* install into a separate profile to avoid conflicts with other Pokémon GO skills or APIs in your main one: `hermes profile create pokeit`, `hermes -p pokeit setup` (model and keys), then `hermes -p pokeit plugins install kbtbc/pokeit-hermes`, and chat in that profile.
+**If something is off**
+
+- **No tools** (the agent says PokeIt isn't loaded): check that the plugin is enabled in the gateway and profile serving the chat, then start a new chat. In Hermes CLI, `/reload-mcp` also works.
+- **Chat works, Radar doesn't:** the Desktop half and the gateway backend are on different versions. Update PokeIt in the chat's profile, restart that gateway (`hermes gateway restart` on the machine it runs on; restarting your own computer does not restart a gateway that runs elsewhere), then quit and reopen Hermes Desktop. Rebooting the machine the gateway runs on is the fallback. Remove old copies under other names (for example `agent-plugin-pokeit-…`) and any `pokeit` server you added by hand with `hermes mcp add`; the plugin brings its own.
+- **No desktop alert:** keep Hermes running, allow its notifications in your system settings, and watch an area with ongoing scan coverage ([pokeit.cc/coverage](https://pokeit.cc/coverage)).
 
 ## Try it
 
@@ -70,7 +74,7 @@ The **PokeIt Radar** opens beside the chat by itself and follows the conversatio
 
 The Desktop installer adds the interface locally and the backend to your selected gateway profile. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
 
-**Watch it: real-time desktop notifications.** Set it and get on with your work. Pick what you care about (highlights, hundos, nundos, PvP rank #1, or an IV minimum) and press **Watch** on the spot the Radar follows. It checks within 500 m about once a minute and your desktop tells you when a new match appears. It ends by itself after 2 hours, or when you choose **Stop**, switch profile or connection, or the gateway reconnects. It never starts scans, so it needs an area PokeIt scans all the time; where there are no ongoing scans yet, the Radar says so. An alert is a toast titled `PokeIt! Nearby <species> (<IV>%)` that says where it was found and how long is left. Clicking it opens the catch in the Radar. Matches also appear in the app. OS toasts appear when Hermes is in the background and notifications are allowed; whether they play a sound follows your system's notification settings.
+**Watch it: real-time desktop notifications.** Set it and get on with your work. Pick what you care about (highlights, hundos, nundos, PvP rank #1, or an IV minimum) and press **Watch** on the spot the Radar follows. It checks within 500 m about once a minute. The first alert covers the matches already there when you press Watch; after that your desktop tells you when another one appears. It ends by itself after 2 hours, or when you choose **Stop**, switch profile or connection, or the gateway reconnects. It never starts scans, so it needs an area PokeIt scans all the time; where there are no ongoing scans yet, the Radar says so. An alert is a toast titled `PokeIt! Nearby <species> (<IV>%)` that says where it was found and how long is left. Clicking it opens the catch in the Radar. Matches also appear in the app. OS toasts appear when Hermes is in the background and notifications are allowed; whether they play a sound follows your system's notification settings.
 
 ## Tools
 
@@ -93,10 +97,6 @@ The Desktop installer adds the interface locally and the backend to your selecte
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
 - The Radar saves your last spot and radius, and the watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.
 - The server runs separately from this repository and can change after you install. Results are not exhaustive and observations can expire before you arrive.
-
-## If the tools disappear
-
-In Hermes CLI, run `/reload-mcp`. On Desktop, close and reopen the app, select the profile where PokeIt is enabled, and start a fresh chat. Desktop doesn't expose that slash command; reopening the app reconnects it without restarting your remote gateway.
 
 ## Other clients
 

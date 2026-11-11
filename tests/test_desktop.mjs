@@ -11,7 +11,7 @@ function atom(value) {
     subscribe: fn => { subscribers.add(fn); fn(value); return () => subscribers.delete(fn); } };
 }
 const host = { notify: () => {}, state: { focusedStoredSessionId: atom('test'), focusedSessionId: atom('test'), profile: atom('default'), connectionId: atom('fixture'), gateway: atom('open') } };
-const sdk = { host, atom, useValue: a => a.get(), useTheme: () => ({ resolvedMode: 'dark' }), gatewayActivationEpoch: () => 1,
+const sdk = { host, atom, useValue: a => a.get(), useTheme: () => ({ resolvedMode: 'dark' }), gatewayActivationEpoch: () => 1, SandboxedFrame: 'iframe',
   PANES_AREA: 'panes', STATUSBAR_AREAS: { right: 'statusBar.right' }, TRANSCRIPT_DIRECTIVE_AREA: 'transcript.directives' };
 const react = { useEffect: () => {}, useMemo: fn => fn(), useRef: value => ({ current: value }), useState: () => {}, useId: () => 'id' };
 const context = vm.createContext({ URL, URLSearchParams, Date, console });
@@ -637,6 +637,56 @@ test('a raid question turns the Radar to raids, a catch question turns it back, 
   assert.equal(ui.safeMapUrl('https://pokeit.cc/coverage/x'), null); assert.equal(ui.safeMapUrl('https://example.com/coverage'), null);
 });
 
+test('a map request that fails while the backend starts is tried again, and Refresh asks again after it gave up', async () => {
+  host.openWorkspace = () => {};
+  let mapCalls = 0, up = false;
+  const doc = { document: '<html>__S__</html>', state_slot: '__S__' };
+  const f = followHarness(async path => {
+    if (path === '/map') { mapCalls++; return up ? { ok: true, data: doc } : { ok: false, error: { message: 'PokeIt is temporarily unavailable.' } }; }
+    return { ok: true, data: path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-10T06:00:00Z' } : {} }; });
+  assert.equal(f.ctrl.mapDocument(), undefined); await flush();
+  assert.equal(mapCalls, 1); assert.equal(f.ctrl.mapDocument(), undefined, 'still loading, not given up');
+  for (let i = 0; i < 3; i++) { const t = f.timeouts.shift(); assert.ok(t, 'a retry is scheduled'); t.cb(); f.ctrl.mapDocument(); await flush(); }
+  assert.equal(mapCalls, 4); assert.equal(f.ctrl.mapDocument(), null, 'after four tries the drawn radar stands in');
+  f.ctrl.mapDocument(); await flush(); assert.equal(mapCalls, 4, 'no endless retry');
+  up = true;                                                                       // the backend is back; Refresh reads the spot
+  await f.ctrl.read('test', { lat: 33.76, lon: -84.39 }, 'Spot', 500);
+  f.ctrl.mapDocument(); await flush();
+  assert.equal(f.ctrl.mapDocument(), doc);
+  // an install without the viewer files has no map, and is not asked again
+  let calls = 0;
+  const g = followHarness(async path => { if (path === '/map') { calls++; return { ok: false, error: { message: 'The map viewer files are missing from this install.' } }; } return { ok: true, data: {} }; });
+  g.ctrl.mapDocument(); await flush(); assert.equal(g.ctrl.mapDocument(), null);
+  await g.ctrl.read('test', { lat: 33.76, lon: -84.39 }, 'Spot', 500); g.ctrl.mapDocument(); await flush();
+  assert.equal(calls, 1);
+});
+
+test('a profile or connection switch stops scan polling and forgets place names', async () => {
+  host.openWorkspace = () => {};
+  const paths = [];
+  const f = followHarness(async path => { paths.push(path);
+    return { ok: true, data: path.startsWith('/coverage') ? { scan_plan: { status: 'in_progress', total_points: 49, counts: { fresh: 3 } } }
+      : path.startsWith('/nearby') ? { observations: [], queried_at: '2026-11-10T06:00:00Z' } : {} }; });
+  const ev = (tool, args) => f.events['tool.complete']({ session_id: 'test', payload: { name: 'mcp__pokeit__' + tool, args } });
+  ev('resolve_location', { query: 'Charging Bull', locality: 'New York' });
+  ev('request_scan', { lat: 40.7055641, lon: -74.0134436 });
+  const tick = f.timeouts.shift(); assert.ok(tick);
+  ev('resolve_location', { query: 'Somewhere', locality: 'Else' });                // a name waiting for its first search
+  host.state.profile.set('other-profile');                                         // the reset
+  const before = paths.length;
+  await tick.cb(); await flush();
+  assert.equal(paths.length, before, 'the old scan poll must not call the backend after a profile switch');
+  assert.equal(f.timeouts.filter(t => t.ms === 5000).length, 0);
+  ev('find_pokemon', { lat: 33.7601442, lon: -84.3934531, radius_m: 500 }); await flush();
+  assert.equal(f.ctrl.state('test').label, 'Search point');                        // not "Somewhere, Else", not "Charging Bull, New York"
+  ev('find_pokemon', { lat: 40.7055641, lon: -74.0134436, radius_m: 500 }); await flush();
+  assert.equal(f.ctrl.state('test').label, 'Search point');
+  host.state.profile.set('default');
+  host.state.connectionId.set('fixture-2');                                        // a connection change resets too
+  assert.equal(f.ctrl.state('test').center, null);
+  host.state.connectionId.set('fixture');
+});
+
 test('the scan line counts points and offers the partial read only after four minutes', () => {
   assert.equal(ui.scanLine(null, 0), null);
   assert.equal(ui.scanLine({ done: 46, total: 49, since: 0 }, 60000).text, 'Scanning…');
@@ -648,7 +698,7 @@ test('the scan line counts points and offers the partial read only after four mi
 test('an older PokeIt backend gets a plain instruction instead of "Unexpected query parameter"', async () => {
   const ctrl = iconController(async () => ({ ok: false, error: { message: 'Unexpected query parameter.' } }));
   await ctrl.read('t', { lat: 34, lon: -84 }, 'Spot', 500);
-  assert.match(ctrl.state('t').error, /older PokeIt in the background/);
-  assert.match(ctrl.state('t').error, /restart your computer/);
+  assert.match(ctrl.state('t').error, /backend in your Hermes gateway is older/);
+  assert.match(ctrl.state('t').error, /restart that Hermes gateway/);
   assert.doesNotMatch(ctrl.state('t').error, /Unexpected query parameter/);
 });

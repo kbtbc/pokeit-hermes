@@ -1,5 +1,11 @@
 # PokeIt release notes
 
+## 0.1.24 · November 10, 2026 (ET)
+
+- Fix: if the backend was not ready when the Radar first asked for its map, the map never came back in that session. It now retries a few times, and Refresh or a new search asks again.
+- Fix: after switching profile or connection, an old scan kept polling the backend and an old place name could label a new spot. A switch now clears scans, place names and follow timing.
+- README and tester guide: install with `--enable`, how to check it took, where each half of the plugin lives, and a short troubleshooting list in place of "restart your computer". Watch's first alert covers matches already present.
+
 ## 0.1.23 · November 10, 2026 (ET)
 
 - The Radar says less: the "limited sample" sentence under the watch is gone, and "never starts a scan" no longer repeats in the footer and the watch panel (it is in the watch line's tooltip and the README).

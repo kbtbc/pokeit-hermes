@@ -3,7 +3,7 @@ import * as sdk from '@hermes/plugin-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.23';
+const VERSION = '0.1.24';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -328,7 +328,7 @@ export function createController(ctx) {
       return response.data;
     } catch (e) {
       const old = /unexpected query parameter/i.test(e?.message || '');
-      const message = old ? 'Hermes is still running an older PokeIt in the background. Quit Hermes and restart your computer (quitting the app alone can leave it running), then open Hermes again. If this stays, look for a second PokeIt under Capabilities → Plugins or in another profile and remove it.'
+      const message = old ? 'The PokeIt backend in your Hermes gateway is older than this Radar. Update PokeIt in the profile you are chatting in, then restart that Hermes gateway (on the machine it runs on) and reopen Hermes.'
         : e?.safeMessage ? text(e.message, 240) : 'PokeIt could not be reached. Enable the plugin for the profile you are chatting in (Capabilities, then Plugins), then try again.';
       // Icons are decoration; a failed one must not mark the backend unhealthy.
       if (!quiet) { healthy = false; lastError = message; }
@@ -349,15 +349,30 @@ export function createController(ctx) {
     return icons.get(k);
   }
   // The map viewer page comes from this plugin's own backend once. undefined = not asked, null = no map (older host or install).
-  let mapShell = Frame ? undefined : null, mapAsked = false;
+  // A failed request is usually a backend that is not ready yet, so it is tried again a few times and again on Refresh.
+  // Only a host without the frame, or an install without the viewer files, has no map for good.
+  let lastPlace = null, lastFollow = 0;
+  const places = [];
+  let mapShell = Frame ? undefined : null, mapAsked = false, mapTries = 0, mapGone = !Frame;
+  const MAP_TRIES = 4;
   function mapDocument() {
-    if (mapShell === undefined && !mapAsked) {
-      mapAsked = true;
-      api('/map', true).then(d => { mapShell = typeof d?.document === 'string' && typeof d.state_slot === 'string' && d.document.includes(d.state_slot) ? d : null; },
-        () => { mapShell = null; }).finally(() => revision.set(revision.get() + 1));
+    if (mapShell === undefined && !mapAsked && mapTries < MAP_TRIES) {
+      mapAsked = true; mapTries++;
+      api('/map', true).then(d => {
+        mapShell = typeof d?.document === 'string' && typeof d.state_slot === 'string' && d.document.includes(d.state_slot) ? d : null;
+        if (!mapShell) mapGone = true;
+        mapAsked = false;
+      }, err => {
+        if (/viewer files/i.test(err?.message || '')) { mapShell = null; mapGone = true; mapAsked = false; return; }
+        if (mapTries >= MAP_TRIES) { mapShell = null; mapAsked = false; return; }           // the drawn radar stands in until Refresh
+        const again = () => { mapAsked = false; revision.set(revision.get() + 1); };
+        if (typeof ctx.setTimeout === 'function') ctx.setTimeout(again, 2500 * mapTries); else again();
+      }).finally(() => revision.set(revision.get() + 1));
     }
     return mapShell;
   }
+  // Refresh, or a new search, asks for the map again after a temporary failure.
+  function retryMap() { if (!mapGone && mapShell === null) { mapShell = undefined; mapAsked = false; mapTries = 0; } }
   function lastSpot() {
     const v = ctx.storage?.get('last-spot:' + watchScope(), null);
     return v && number(v.lat) && number(v.lon) && Math.abs(v.lat) <= 85 && Math.abs(v.lon) <= 180 && typeof v.label === 'string' && radiusOf(v.radius) === v.radius
@@ -404,6 +419,7 @@ export function createController(ctx) {
     }, 10000);
   }
   async function read(sid, center, label, radius, wanted) {
+    retryMap();
     const s = state(sid), generation = s.generation + 1;
     // The mode stays with the place until a question changes it; a new place starts on catches.
     const mode = wanted || (s.center && distanceBearing(s.center, center)?.meters < 5 && s.mode === 'raids' ? 'raids' : 'catches');
@@ -442,11 +458,18 @@ export function createController(ctx) {
     update(sid, { observations: (keep ? [...list, observation] : [observation, ...list]).slice(0, 50), selected: keep ? s.selected : observation.observation_id });
     if (moved) void loadForts(sid, center, state(sid).radius, state(sid).generation);
   }
-  function reset() { sessions.clear(); icons.clear(); iconQueue.length = 0; if (Frame) { mapShell = undefined; mapAsked = false; } revision.set(revision.get() + 1); healthy = null; }
+  // Another profile or connection is another backend: nothing from the last one may carry over. Clearing the sessions and the
+  // scan tokens also makes every read, scan poll and coverage check that is still in flight drop its result.
+  function reset() {
+    sessions.clear(); scans.clear(); icons.clear(); iconQueue.length = 0;
+    lastPlace = null; lastFollow = 0; places.length = 0;
+    if (Frame) { mapShell = undefined; mapAsked = false; mapTries = 0; mapGone = false; }
+    revision.set(revision.get() + 1); healthy = null;
+  }
   ctx.setInterval(() => clock.set(Date.now()), 1000);
-  const unsub = host.state.profile.subscribe(reset);
+  const unsubs = [host.state.profile.subscribe(reset), host.state.connectionId?.subscribe(reset)].filter(Boolean);
   ctx.onEvent('gateway.ready', reset);
-  ctx.onDispose(() => { alive = false; unsub(); sessions.clear(); icons.clear(); });
+  ctx.onDispose(() => { alive = false; for (const u of unsubs) u(); sessions.clear(); scans.clear(); icons.clear(); });
   async function debug() {
     let health;
     try { health = await api('/health'); } catch { health = { reachable: false }; }
@@ -458,7 +481,6 @@ export function createController(ctx) {
   const controller = { ctx, revision, clock, iconRev, state, update, api, read, adopt, icon, lastSpot, mapDocument, debug, healthy: () => healthy };
   // The map follows the chat without help from the model: when the agent's own PokeIt search finishes,
   // the pane reads the same point and opens beside the answer. Only this plugin's tool names are looked at.
-  let lastPlace = null, lastFollow = 0;
   // What the hook has seen, for the debug report: counts only, never ids, places or text.
   const follow = { events: 0, replayed: 0, other_chat: 0, reads: 0, scans_tracked: 0 };
   // The event's session id can be the stored id or the runtime id of the focused chat. Either one means "this chat".
@@ -502,7 +524,6 @@ export function createController(ctx) {
   // The place name comes from the agent's resolve_location call. A name belongs to the first search made after it. When the
   // chat returns to an earlier place the agent reuses the point without resolving again, so names are also remembered by point;
   // otherwise the last resolved name (another city) would be shown over this one.
-  const places = [];
   const labelFor = center => {
     if (lastPlace && !lastPlace.used && Date.now() - lastPlace.at < 180000 && lastPlace.label) {
       lastPlace.used = true;

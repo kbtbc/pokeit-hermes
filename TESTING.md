@@ -1,17 +1,18 @@
-# Testing PokeIt 0.1.23
+# Testing PokeIt 0.1.24
 
-About 20 minutes. You need Hermes Desktop 0.23.0 or newer (the status bar shows `client v0.23.0`; if it says v0.22.x, update Hermes first) and a model that can call tools. Data is US-only for now; the Atlanta and Alpharetta/Roswell areas are the best covered, and [pokeit.cc/coverage](https://pokeit.cc/coverage) shows all of them.
+About 20 minutes. You need Hermes Desktop 0.23.0 or newer (the status bar shows `client v0.23.0`; if it says v0.22.x, update Hermes first) and a model that can call tools. Areas with ongoing scans are listed at [pokeit.cc/coverage](https://pokeit.cc/coverage) (all in the US today; Atlanta and Alpharetta/Roswell are the best covered). Anywhere else the agent asks to run a fresh scan first.
 
 ## 1. Install the new build
 
-If you already have an older PokeIt, remove it first. Run these in the default profile (no `-p`), because Desktop copies the Radar from that install.
+Install into the profile you chat in (add `-p <profile>` if it is not the default). If your Hermes gateway runs on another machine, run this there.
 
 ```sh
-hermes plugins remove pokeit
 hermes plugins install kbtbc/pokeit-hermes --enable --yes-deps
 ```
 
-Open **Capabilities → Plugins** and make sure there is exactly one PokeIt entry. Older or Desktop-made installs can appear under other names (for example `agent-plugin-pokeit-…`); remove those. Two copies fight each other, and an old backend makes the Radar say that Hermes is still running an older PokeIt. Hermes keeps background processes alive after you quit the app, so after removing an old copy restart your computer before installing again. If you use another profile, enable PokeIt there too.
+If you already have PokeIt, `hermes plugins update pokeit` in that profile is enough; then restart that gateway (`hermes gateway restart`).
+
+Open **Capabilities → Plugins → PokeIt** and check it says "pokeit: connected" with the **Desktop** and profile switches on. Remove old copies under other names (for example `agent-plugin-pokeit-…`) and any `pokeit` server added by hand with `hermes mcp add`. A gateway backend older than the Radar makes the Radar say so.
 
 Quit Hermes Desktop completely and start it again, then open a new chat.
 
