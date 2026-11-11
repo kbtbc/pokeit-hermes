@@ -23,19 +23,9 @@ Ask Hermes what's worth catching near you. A live radar opens beside the chat wi
 hermes plugins install kbtbc/pokeit-hermes --enable
 ```
 
-`--enable` matters: without it Hermes asks "Enable now? [y/N]", and pressing Enter (or an agent running the command for you) leaves the plugin installed but off. On Hermes Desktop (0.23.0+) you can use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes` instead, then switch it on.
+Without `--enable` Hermes asks "Enable now? [y/N]" and Enter leaves the plugin off. On Hermes Desktop you can also use **Capabilities → Plugins → Install from Git** with `https://github.com/kbtbc/pokeit-hermes`, then switch it on.
 
-**Check it took:** `hermes plugins list` shows `pokeit` as enabled, and on Desktop **Capabilities → Plugins → PokeIt** shows "pokeit: connected" with both the **Desktop** and profile switches on. Then quit and reopen Hermes Desktop and start a new chat; a chat that was open during the install does not have the tools.
-
-The plugin has two halves. The agent half (tools, skill and the Radar's small read backend) lives in the Hermes gateway of the profile you chat in, which may be on another machine. The Desktop half (the Radar) is copied into the Hermes Desktop app. Enable PokeIt in the gateway and profile that serve your chat.
-
-Update with `hermes plugins update pokeit` in that same profile, then restart that gateway and reopen Hermes Desktop. Installs made with `--ref <sha>` stay pinned; move them with `--force --ref <new sha>`.
-
-**If something is off**
-
-- **No tools** (the agent says PokeIt isn't loaded): check that the plugin is enabled in the gateway and profile serving the chat, then start a new chat. In Hermes CLI, `/reload-mcp` also works.
-- **Chat works, Radar doesn't:** the Desktop half and the gateway backend are on different versions. Update PokeIt in the chat's profile, restart that gateway (`hermes gateway restart` on the machine it runs on; restarting your own computer does not restart a gateway that runs elsewhere), then quit and reopen Hermes Desktop. Rebooting the machine the gateway runs on is the fallback. Remove old copies under other names (for example `agent-plugin-pokeit-…`) and any `pokeit` server you added by hand with `hermes mcp add`; the plugin brings its own.
-- **No desktop alert:** keep Hermes running, allow its notifications in your system settings, and watch an area with ongoing scan coverage ([pokeit.cc/coverage](https://pokeit.cc/coverage)).
+Enable PokeIt in the profile and gateway that serve your chat, then restart Hermes and open a new chat. `hermes plugins list` should show `pokeit` as enabled. Update with `hermes plugins update pokeit`.
 
 ## Try it
 
@@ -59,7 +49,7 @@ Your agent doesn't know your GPS, so if you only name a city it will ask for som
 
 Hermes calls the hosted PokeIt MCP server, which answers from observations on the public map. There is no language model inside the server.
 
-Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and a scan can take a few minutes. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart.
+Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering a 371 m radius. Hermes asks you to approve before it starts, and scans can take one or two minutes. Reading data never starts a scan. Without signing in you get 20 full scans per network per rolling 24 hours, one minute apart.
 
 ## Why a plugin, not just a skill
 
@@ -70,11 +60,9 @@ Outside the scanned areas, your agent can ask PokeIt to scan: 49 points covering
 
 ## Hermes Desktop
 
-The **PokeIt Radar** opens beside the chat by itself and follows the conversation: ask about catches, raids, gyms, showcases or Pokéstops anywhere and it moves there. It lists the best three or four catches (hundos, nundos and PvP #1 first, then the highest IV) and shows them on a live map with the gyms, raids and Pokéstops around. Click a catch for its IVs, a countdown and whether the walk is worth it. A link under the map opens the same area on the full [live map](https://pokeit.cc/map). There is no search box: ask in chat, or start from the big question on the Radar's first screen. Close the Radar and it stays closed until you open **PokeIt Radar** from the status bar. The buttons under the map (**Best catches**, **Raids nearby**, **Open gyms**, **Events today**) put a ready question in the chat bar, replacing the question the last button wrote and leaving anything you typed. Ask for "PokeIt cards" to get catch cards in the chat. Catch cards show the species art, IVs, a compass to the catch, a live countdown and a walking guide, a straight line at 5 km/h from the place you searched rather than from you. While a scan runs, the Radar moves to the spot and shows a turning sweep, then fills in the catches when it finishes. New scans still use the agent's approval prompt.
-
-The Desktop installer adds the interface locally and the backend to your selected gateway profile. The radar runs on your computer; its small read proxy runs with the gateway. The same package still works without Desktop on CLI and messaging clients.
-
-**Watch it: real-time desktop notifications.** Set it and get on with your work. Pick what you care about (highlights, hundos, nundos, PvP rank #1, or an IV minimum) and press **Watch** on the spot the Radar follows. It checks within 500 m about once a minute. The first alert covers the matches already there when you press Watch; after that your desktop tells you when another one appears. It ends by itself after 2 hours, or when you choose **Stop**, switch profile or connection, or the gateway reconnects. It never starts scans, so it needs an area PokeIt scans all the time; where there are no ongoing scans yet, the Radar says so. An alert is a toast titled `PokeIt! Nearby <species> (<IV>%)` that says where it was found and how long is left. Clicking it opens the catch in the Radar. Matches also appear in the app. OS toasts appear when Hermes is in the background and notifications are allowed; whether they play a sound follows your system's notification settings.
+- **PokeIt Radar** opens beside the chat by itself and follows the conversation. It shows the best catches on a live map with gyms, raids and Pokéstops; click a catch for its IVs, a countdown and whether the walk is worth it. Ask about raids and the map switches to raid bosses.
+- **Watch it** sends real-time desktop notifications. Pick a filter (highlights, hundos, nundos, PvP rank #1 or an IV minimum) and press **Watch**. It checks within 500 m once a minute for two hours: the first alert covers matches already there, later ones are new arrivals. It reads what scans have found and never starts one, so it needs an area with ongoing coverage ([pokeit.cc/coverage](https://pokeit.cc/coverage)), Hermes left running and notifications allowed.
+- New scans always go through Hermes's approval prompt. Everything else in the Radar is read-only.
 
 ## Tools
 
@@ -92,7 +80,6 @@ The Desktop installer adds the interface locally and the backend to your selecte
 
 - Each tool call sends coordinates, place text and filters to `https://mcp.pokeit.cc`, which PokeIt runs. No files, credentials or conversation text are sent. Desktop uses the same host through a read-only Python proxy in your Hermes gateway, with a short in-memory cache, and the proxy also loads species icons from `https://pokeit.cc/assets`; no location goes with an icon request. Opening a map link opens `https://pokeit.cc` in your browser.
 - The service keeps tool names, filters, timings and result counts for about 14 days. A scan request keeps its coordinates and request ID for 24 hours, plus a keyed hash of your network address (not the address) to apply the trial limit. Ordinary web logs hold IP, path, time and status.
-- This preview build sends the header `X-PokeIt-Search-Diagnostics: 1`, so the service also logs the place text you submit for about 14 days, to debug searches. Coordinates, full tool payloads and conversations are not part of that log. To opt out, remove the header in your own MCP config, or send `Sec-GPC: 1`.
 - Place search uses OpenStreetMap data, © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Species names in other languages can come from WatWowMap's public translation files on GitHub; no user data goes with that request.
 - Map previews are drawn by the service in a signed-out browser and cached for 60 seconds.
 - The Radar saves your last spot and radius, and the watch saves its filter and minimum IV, locally per gateway/profile. A running watch keeps its location and seen catches in memory and does not resume after reopening the app.

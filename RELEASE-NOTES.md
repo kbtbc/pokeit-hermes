@@ -1,5 +1,10 @@
 # PokeIt release notes
 
+## 0.1.25 · November 10, 2026 (ET)
+
+- The search-diagnostics header is gone from `mcp.json`: the plugin no longer asks the service to log the place text you submit.
+- README: shorter install and Hermes Desktop sections.
+
 ## 0.1.24 · November 10, 2026 (ET)
 
 - Fix: if the backend was not ready when the Radar first asked for its map, the map never came back in that session. It now retries a few times, and Refresh or a new search asks again.

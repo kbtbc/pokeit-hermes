@@ -3,7 +3,7 @@ import * as sdk from '@hermes/plugin-sdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsx as h, jsxs as hs } from 'react/jsx-runtime';
 
-const VERSION = '0.1.24';
+const VERSION = '0.1.25';
 const ORIGIN = 'https://pokeit.cc';
 const ID = /^pid_[A-Za-z0-9_-]{1,96}$/;
 const SCAN_ID = /^[A-Za-z0-9_-]{32}$/;

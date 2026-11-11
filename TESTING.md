@@ -1,4 +1,4 @@
-# Testing PokeIt 0.1.24
+# Testing PokeIt 0.1.25
 
 About 20 minutes. You need Hermes Desktop 0.23.0 or newer (the status bar shows `client v0.23.0`; if it says v0.22.x, update Hermes first) and a model that can call tools. Areas with ongoing scans are listed at [pokeit.cc/coverage](https://pokeit.cc/coverage) (all in the US today; Atlanta and Alpharetta/Roswell are the best covered). Anywhere else the agent asks to run a fresh scan first.
 
@@ -45,5 +45,4 @@ Send it on [Discord](https://discord.gg/3NSTeCxBXk).
 ## Notes
 
 - Scans are limited to 20 per network per rolling 24 hours, one minute apart. Reading data is not limited.
-- This beta build sends `X-PokeIt-Search-Diagnostics: 1`, so the service logs the place text you type for about 14 days. To opt out, remove that header from `mcp.json` in the plugin folder or send `Sec-GPC: 1`.
 - Remove it with `hermes plugins remove pokeit`.
