@@ -103,6 +103,20 @@ test('Show in Radar selects the catch and opens the same workspace for its chat'
   assert.equal(pane.props.sessionId, 'chat-2');
 });
 
+test('a closed Radar stays closed for answers and marks the status button until the player opens it', () => {
+  const opened = [];
+  host.openWorkspace = (id, options) => opened.push({ id, options });
+  ui.openRadar({}, 'chat-1');                                              // the player opens it
+  assert.equal(opened.length, 1); assert.equal(ui.radarHeld.get(), false);
+  ui.openRadar({}, 'chat-1', false);                                       // an answer while open: no dot
+  assert.equal(opened.length, 2); assert.equal(ui.radarHeld.get(), false);
+  opened[1].options.onClose();                                             // the player closes it
+  ui.openRadar({}, 'chat-1', false);                                       // the next answer does not reopen it
+  assert.equal(opened.length, 2); assert.equal(ui.radarHeld.get(), true);
+  ui.openRadar({}, 'chat-1');                                              // opening it clears the dot
+  assert.equal(opened.length, 3); assert.equal(ui.radarHeld.get(), false);
+});
+
 test('a late previous-area read cannot replace the selected card location', async () => {
   let finish;
   const pending = new Promise(resolve => { finish = resolve; });

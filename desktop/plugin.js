@@ -575,9 +575,12 @@ export async function draft(textValue, sid = null) {
   if (ok) seeded.set(key, textValue); else host.notify({ kind: 'warning', message: 'Open this chat to add the question.' });
 }
 // The map docks beside the chat. Once the player closes it, answers stop reopening it until they ask for it again.
+// An answer that arrives while it is closed sets radarHeld, which puts a dot on the status-bar button until the player opens it.
 let closedByPlayer = false;
-function openRadar(ctrl, sid, byPlayer = true) {
-  if (byPlayer) closedByPlayer = false; else if (closedByPlayer) return;
+export const radarHeld = atom(false);
+export function openRadar(ctrl, sid, byPlayer = true) {
+  if (byPlayer) { closedByPlayer = false; if (radarHeld.get()) radarHeld.set(false); }
+  else if (closedByPlayer) { if (!radarHeld.get()) radarHeld.set(true); return; }
   host.openWorkspace('pokeit:radar', { title: 'PokeIt Radar', minWidth: '22rem', dock: { pane: 'workspace', pos: 'right' },
     render: () => h(RadarPane, { ctrl, sessionId: sid }), onClose: () => { closedByPlayer = true; } });
 }
@@ -1115,10 +1118,12 @@ function ScanCard({ ctrl, attrs, streaming }) {
 function StatusChip({ ctrl }) {
   const c = useColors(), sid = useActiveSession();
   const s = useRadar(ctrl, sid), now = useValue(ctrl.clock), watch = useValue(ctrl.watch.view);
-  const liveCount = s.observations.filter(p => !expiry(p, now).expired).length;
-  return h('button', { type: 'button', title: 'Open PokeIt Radar', style: { font: `600 11px ${font}`, cursor: 'pointer', color: 'var(--ui-text-secondary)', background: 'transparent', border: 0, padding: '2px 6px' },
+  const liveCount = s.observations.filter(p => !expiry(p, now).expired).length, held = useValue(radarHeld);
+  return h('button', { type: 'button', title: held ? 'New results. Open PokeIt Radar' : 'Open PokeIt Radar', style: { font: `600 11px ${font}`, cursor: 'pointer', color: 'var(--ui-text-secondary)', background: 'transparent', border: 0, padding: '2px 6px' },
     onClick: () => openRadar(ctrl, sid),
-    children: hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), watch.active ? ' · Watching' : s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] }) });
+    children: hs('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 }, children: [
+      held && h('span', { 'aria-label': 'New results', style: { width: 6, height: 6, borderRadius: '50%', background: c.accent, flex: 'none' } }),
+      hs('span', { children: ['Poke', h('span', { style: { color: c.accent }, children: 'It' }), watch.active ? ' · Watching' : s.busy ? ' · reading' : liveCount ? ` · ${liveCount} nearby` : ' · Radar'] })] }) });
 }
 
 export default {
